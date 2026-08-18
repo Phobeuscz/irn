@@ -30,9 +30,6 @@ from drivers.shared_utils import (
 from utils.cache_manager import CacheManager
 from utils.logger import Logger
 from utils.model_ids import (
-    MODE_CHAT,
-    MODE_REASONER,
-    resolve_behavior_mode,
     resolve_real_model_label_from_model_id,
 )
 
@@ -1233,19 +1230,17 @@ class GLMDriver(BaseDriver):
         self.ece_mark_used(email)
 
     def _resolve_deepthink_flags(self, model: str) -> tuple[bool, bool]:
+        """Resolve Deep Think from the user's configured GLM settings.
+
+        The model behavior mode must not silently override the user's Deep Think
+        selection. In particular, MODE_CHAT previously forced Deep Think off,
+        which caused the UI setting to be turned back off on every new request.
+        Model-specific capability is handled later by the actual UI toggle path.
+        """
+        del model  # Kept in the signature for compatibility with existing callers.
+
         enable_deepthink = bool(self.config_manager.get_setting("glm_behavior", "enable_deepthink"))
         send_deepthink = bool(self.config_manager.get_setting("glm_behavior", "send_deepthink"))
-
-        mode = resolve_behavior_mode(
-            model,
-            self.provider,
-            real_model_labels=self.api_real_model_labels(),
-        )
-        if mode == MODE_CHAT:
-            return False, False
-        if mode == MODE_REASONER:
-            return True, send_deepthink
-
         return enable_deepthink, send_deepthink
 
     def _glm_tools_supported_for_model(self, model_friendly: str) -> bool:
