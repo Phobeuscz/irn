@@ -4,7 +4,10 @@ icon: providers/moonshot
 
 # :providers-moonshot: Moonshot Behavior
 
-This page covers the toggles and options that control how IntenseRP interacts with **Moonshot** (`kimi.com`).
+This page covers the toggles and options that control how IntenseRP interacts with **Moonshot** (`kimi.ai`).
+
+!!! note "Kimi domains"
+    Kimi runs the same app on two regional domains: **kimi.ai** (overseas, the default) and **kimi.com** (China). IntenseRP starts new sessions on `kimi.ai` and accepts both domains for existing sessions, so accounts living on either domain keep working.
 
 !!! note "Model IDs"
     Moonshot exposes three API behavior presets:

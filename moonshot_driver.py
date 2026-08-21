@@ -43,8 +43,14 @@ class MoonshotDriver(BaseDriver):
         "/apiv2/kimi.gateway.chat.v1.ChatService/RegenerateMessage",
     )
     USER_SETTINGS_ROUTE_GLOB = "**/apiv2/kimi.usersetting.v1.UserSettingService/GetUserSetting*"
-    USER_SETTINGS_UPDATE_URL = "https://www.kimi.com/apiv2/kimi.usersetting.v1.UserSettingService/UpdateUserSetting"
-    NEW_CHAT_URL = "https://www.kimi.com/?chat_enter_method=new_chat"
+    # Kimi runs the same app on two regional domains: kimi.com (CN) and
+    # kimi.ai (overseas). New sessions start on the overseas origin, but every
+    # host check accepts both so existing CN sessions keep working.
+    SITE_ORIGIN = "https://www.kimi.ai"
+    SITE_ORIGIN_PEER = "https://www.kimi.com"
+    SITE_HOSTS = {"www.kimi.com", "kimi.com", "www.kimi.ai", "kimi.ai"}
+    USER_SETTINGS_UPDATE_PATH = "/apiv2/kimi.usersetting.v1.UserSettingService/UpdateUserSetting"
+    NEW_CHAT_URL = "https://www.kimi.ai/?chat_enter_method=new_chat"
     AUTH_HOST_MARKER = "accounts.google.com"
     MEMORY_DISABLE_UPDATE_PAYLOAD = {
         "user_setting": {"memory": {}},
@@ -116,7 +122,23 @@ class MoonshotDriver(BaseDriver):
         self._last_followup_request_headers: Dict[str, str] = {}
 
     def get_start_url(self) -> str:
-        return "https://www.kimi.com/"
+        return f"{self.SITE_ORIGIN}/"
+
+    def _get_site_origin(self) -> str:
+        """Return the origin the live session currently lives on.
+
+        Kimi migrates sessions between kimi.com (CN) and kimi.ai (overseas),
+        so API calls must target whichever host the page actually uses.
+        """
+        if self.page:
+            try:
+                parsed = urlsplit(str(self.page.url or ""))
+                netloc = str(parsed.netloc or "").strip().lower()
+                if netloc in self.SITE_HOSTS and parsed.scheme:
+                    return f"{parsed.scheme}://{netloc}"
+            except Exception:
+                pass
+        return self.SITE_ORIGIN
 
     async def before_initial_navigation(self) -> None:
         if not self.page:
@@ -339,7 +361,7 @@ class MoonshotDriver(BaseDriver):
                                 const resp = await fetch(request.url, {
                                     method: request.method || "POST",
                                     credentials: "include",
-                                    referrer: request.referrer || "https://www.kimi.com/settings",
+                                    referrer: request.referrer || (window.location.origin + "/settings"),
                                     headers: {
                                         ...(request.headers || {}),
                                         "content-type": "application/json",
@@ -374,7 +396,7 @@ class MoonshotDriver(BaseDriver):
                         return out;
                     }""",
                     {
-                        "url": self.USER_SETTINGS_UPDATE_URL,
+                        "url": f"{self._get_site_origin()}{self.USER_SETTINGS_UPDATE_PATH}",
                         "body": self.MEMORY_DISABLE_UPDATE_PAYLOAD,
                         "headers": forwarded_headers,
                         "refresh": refresh_args,
@@ -1428,7 +1450,7 @@ class MoonshotDriver(BaseDriver):
             return None
 
         hostname = str(parsed.netloc or "").strip().lower()
-        if hostname not in {"www.kimi.com", "kimi.com"}:
+        if hostname not in self.SITE_HOSTS:
             return None
 
         path_parts = [part for part in str(parsed.path or "").split("/") if part]
@@ -1439,9 +1461,10 @@ class MoonshotDriver(BaseDriver):
         if not conversation_id:
             return None
 
+        scheme = str(parsed.scheme or "https").strip().lower() or "https"
         return {
             "conversation_id": conversation_id,
-            "conversation_url": f"https://www.kimi.com/chat/{conversation_id}",
+            "conversation_url": f"{scheme}://{hostname}/chat/{conversation_id}",
         }
 
     async def _get_current_conversation_info(self) -> Optional[Dict[str, str]]:
@@ -1486,15 +1509,16 @@ class MoonshotDriver(BaseDriver):
 
         cookies = await self._get_context_cookie_dict()
         headers = dict(getattr(self, "_last_followup_request_headers", {}) or {})
+        site_origin = self._get_site_origin()
         headers.setdefault("accept", "application/json, text/plain, */*")
         headers.setdefault("content-type", "application/json")
-        headers.setdefault("origin", "https://www.kimi.com")
-        headers.setdefault("referer", "https://www.kimi.com/")
+        headers.setdefault("origin", site_origin)
+        headers.setdefault("referer", f"{site_origin}/")
 
         try:
             client = await self._get_http_client()
             response = await client.post(
-                "https://www.kimi.com/apiv2/kimi.chat.v1.ChatService/DeleteChat",
+                f"{site_origin}/apiv2/kimi.chat.v1.ChatService/DeleteChat",
                 headers=headers,
                 cookies=cookies,
                 json={"chat_id": normalized_id},

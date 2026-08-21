@@ -15,7 +15,7 @@ Before we dive in, make sure you have:
 | | |
 |---|---|
 | :material-microsoft-windows: **Windows 10/11** or :material-linux: **Linux** | 64-bit with a graphical desktop |
-| :material-account-plus: **Provider account** | [DeepSeek](https://chat.deepseek.com), [GLM Chat (Z.ai)](https://chat.z.ai/), [Kimi](https://www.kimi.com/), [QwenLM](https://chat.qwen.ai/), [Perplexity](https://www.perplexity.ai/), [HuggingChat](https://huggingface.co/chat), [Google AI Studio](https://aistudio.google.com/), or [Xiaomi MiMo](https://aistudio.xiaomimimo.com/#/c). |
+| :material-account-plus: **Provider account** | [DeepSeek](https://chat.deepseek.com), [GLM Chat (Z.ai)](https://chat.z.ai/), [Kimi](https://www.kimi.ai/), [QwenLM](https://chat.qwen.ai/), [Perplexity](https://www.perplexity.ai/), [HuggingChat](https://huggingface.co/chat), [Google AI Studio](https://aistudio.google.com/), or [Xiaomi MiMo](https://aistudio.xiaomimimo.com/#/c). |
 | :material-chat: **SillyTavern** (or similar) | Any OpenAI-compatible client works |
 
 ---
