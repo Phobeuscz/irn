@@ -2778,11 +2778,24 @@ class MoonshotDriver(BaseDriver):
         )
 
     def _get_configured_model_friendly(self) -> str:
+        """Return the configured picker model, or '' for Auto mode.
+
+        Sanitizes legacy/broken values: option dicts saved by older builds
+        (e.g. "{'label': 'Kimi K3', ...}") and anything unrecognizable are
+        treated as Auto instead of being fed to the picker.
+        """
         try:
-            value = self.config_manager.get_setting("moonshot_behavior", "model")
+            raw = self.config_manager.get_setting("moonshot_behavior", "model")
         except Exception:
-            value = None
-        return str(value or "").strip()
+            raw = None
+
+        if isinstance(raw, dict):
+            raw = raw.get("value") or raw.get("label") or ""
+
+        value = str(raw or "").strip()
+        if not value or value.startswith("{") or value.lower().startswith("auto"):
+            return ""
+        return value
 
     async def set_deepthink_state(self, state: bool):
         configured_model = self._get_configured_model_friendly()

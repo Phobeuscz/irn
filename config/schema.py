@@ -80,24 +80,13 @@ REQUEST_CAPTURE_CDP_ONLY_OPTIONS = [
 MOONSHOT_REGION_OVERSEAS = "overseas"
 MOONSHOT_REGION_CN = "cn"
 
-MOONSHOT_MODEL_AUTO = ""
+# DROPDOWN fields take plain strings (the stored value equals the visible label).
+MOONSHOT_MODEL_AUTO_LABEL = "Auto (Thinking toggle)"
 MOONSHOT_MODEL_OPTIONS = [
-    {
-        "label": "Auto (Thinking toggle)",
-        "value": MOONSHOT_MODEL_AUTO,
-    },
-    {
-        "label": "Instant",
-        "value": "Instant",
-    },
-    {
-        "label": "Kimi K3",
-        "value": "Kimi K3",
-    },
-    {
-        "label": "Kimi K3 Swarm",
-        "value": "Kimi K3 Swarm",
-    },
+    MOONSHOT_MODEL_AUTO_LABEL,
+    "Instant",
+    "Kimi K3",
+    "Kimi K3 Swarm",
 ]
 
 MOONSHOT_REGION_OPTIONS = [
@@ -814,7 +803,7 @@ SCHEMA = [
                 key="model",
                 label="Model",
                 type=SettingType.DROPDOWN,
-                default=MOONSHOT_MODEL_AUTO,
+                default=MOONSHOT_MODEL_AUTO_LABEL,
                 options=MOONSHOT_MODEL_OPTIONS,
                 tooltip=(
                     "Pick a specific model in Kimi's picker. Auto keeps the classic "
