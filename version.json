@@ -1,8 +1,8 @@
 {
-  "version": "2.9.0-update",
+  "version": "2.9.1-patch",
   "aua": true,
-  "severity": 4,
+  "severity": 3,
   "pu": "discord",
   "pufref": "none",
-  "summary": "Anniversary update with Xiaomi MiMo, Dry Run Mode, CDP Teeing, and runtime polish"
+  "summary": "GLM Chat fixes: new completion endpoint, GLM-5.3 support, refusal/captcha transparency, CDP Teeing hardening"
 }

@@ -8,6 +8,23 @@ icon: material/newspaper-variant-outline
 
 This page is the changelog for the latest news and updates about IntenseRP Next.
 
+## August 21, 2026 - Update 2.9.1-patch
+
+This patch release is all about **GLM Chat**: z.ai changed things on their side, and this update catches IntenseRP up.
+
+The big one: **GLM Chat works again** after z.ai moved its completion endpoint (IntenseRP now accepts both the old and new paths). On top of that, **GLM-5.3** is now supported and selected by default, including its Deep Think effort menu, with new `glm-5-3-auto` / `glm-5-3-reasoner` / `glm-5-3-chat` API model IDs.
+
+This update also makes GLM's failures *honest*. When z.ai's moderation or risk control refuses a request, you used to get silence; now every structured refusal (`SENSITIVE`, `RISK_CONTROL_BLOCKED`, CAPTCHA codes, generic API errors) is logged with its code and forwarded to your client as a proper error event, with a desktop notification when a FeiLin CAPTCHA needs solving in the browser window. Metadata-only "silent refusals" are detected and reported instead of masquerading as success, and CDP Teeing no longer loses fast-failing responses (the buffered body is recovered automatically).
+
+Smaller goodies: the FeiLin SDK's console-wiping anti-debug trick is neutralized so your DevTools logs survive challenges, CAPTCHA resource loading is observed and logged, and the API worker closes driver generators deterministically (no more `GeneratorExit` noise on retries).
+
+[Full Release Notes](https://github.com/LyubomirT/intense-rp-next/releases/tag/v2.9.1-patch){ .md-button .md-button--primary }
+[Join our Discord](https://discord.gg/4Gvjk2RdsK){ .md-button }
+[GLM Behavior](providers/glm-behavior.md){ .md-button }
+[GLM Quirks](advanced/glm-quirks.md){ .md-button }
+
+---
+
 ## July 4, 2026 - Update 2.9.0
 
 IntenseRP Next v2.9.0 is here, and this one is a little special: **IntenseRP Next is turning 1 year old this July**!!! 🎆🎆🎆✨✨✨

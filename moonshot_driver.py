@@ -43,8 +43,14 @@ class MoonshotDriver(BaseDriver):
         "/apiv2/kimi.gateway.chat.v1.ChatService/RegenerateMessage",
     )
     USER_SETTINGS_ROUTE_GLOB = "**/apiv2/kimi.usersetting.v1.UserSettingService/GetUserSetting*"
-    USER_SETTINGS_UPDATE_URL = "https://www.kimi.com/apiv2/kimi.usersetting.v1.UserSettingService/UpdateUserSetting"
-    NEW_CHAT_URL = "https://www.kimi.com/?chat_enter_method=new_chat"
+    # Kimi runs the same app on two regional domains: kimi.com (CN) and
+    # kimi.ai (overseas). New sessions start on the overseas origin, but every
+    # host check accepts both so existing CN sessions keep working.
+    SITE_ORIGIN = "https://www.kimi.ai"
+    SITE_ORIGIN_PEER = "https://www.kimi.com"
+    SITE_HOSTS = {"www.kimi.com", "kimi.com", "www.kimi.ai", "kimi.ai"}
+    USER_SETTINGS_UPDATE_PATH = "/apiv2/kimi.usersetting.v1.UserSettingService/UpdateUserSetting"
+    NEW_CHAT_URL = "https://www.kimi.ai/?chat_enter_method=new_chat"
     AUTH_HOST_MARKER = "accounts.google.com"
     MEMORY_DISABLE_UPDATE_PAYLOAD = {
         "user_setting": {"memory": {}},
@@ -63,8 +69,24 @@ class MoonshotDriver(BaseDriver):
         "x-traffic-id",
     }
     CONNECT_MAX_FRAME_BYTES = 8 * 1024 * 1024
-    MODEL_INSTANT = "K2.6 Instant"
+    MODEL_INSTANT = "Instant"
     MODEL_THINKING = "K2.6 Thinking"
+    MODEL_K3 = "Kimi K3"
+    MODEL_K3_SWARM = "Kimi K3 Swarm"
+    # Picker labels change between Kimi rollouts ("K2.6 Instant" -> "Instant"),
+    # so each known model maps to accepted normalized-name aliases.
+    MODEL_MATCH_ALIASES = {
+        "instant": ("instant",),
+        "k2.6 instant": ("instant",),
+        "kimi instant": ("instant",),
+        "thinking": ("thinking",),
+        "k2.6 thinking": ("thinking",),
+        "kimi thinking": ("thinking",),
+        "kimi k3": ("kimi k3", "k3"),
+        "k3": ("k3",),
+        "kimi k3 swarm": ("kimi k3 swarm", "k3 swarm"),
+        "k3 swarm": ("k3 swarm",),
+    }
     MODEL_CHAT_API = "moonshot-chat"
     MODEL_REASONER_API = "moonshot-reasoner"
     INTERCEPT_FIRST_CHUNK_TIMEOUT_S = 45.0
@@ -116,7 +138,36 @@ class MoonshotDriver(BaseDriver):
         self._last_followup_request_headers: Dict[str, str] = {}
 
     def get_start_url(self) -> str:
-        return "https://www.kimi.com/"
+        return f"{self._get_configured_site_origin()}/"
+
+    def _get_configured_site_origin(self) -> str:
+        """Return the Kimi origin preferred by the user's region setting."""
+        try:
+            region = str(
+                self.config_manager.get_setting("moonshot_behavior", "site_region") or ""
+            ).strip().lower()
+        except Exception:
+            region = ""
+        if region == "cn":
+            return self.SITE_ORIGIN_PEER
+        return self.SITE_ORIGIN
+
+    def _get_site_origin(self) -> str:
+        """Return the origin the live session currently lives on.
+
+        Kimi migrates sessions between kimi.com (CN) and kimi.ai (overseas),
+        so API calls must target whichever host the page actually uses.
+        Falls back to the user's configured region when unknown.
+        """
+        if self.page:
+            try:
+                parsed = urlsplit(str(self.page.url or ""))
+                netloc = str(parsed.netloc or "").strip().lower()
+                if netloc in self.SITE_HOSTS and parsed.scheme:
+                    return f"{parsed.scheme}://{netloc}"
+            except Exception:
+                pass
+        return self._get_configured_site_origin()
 
     async def before_initial_navigation(self) -> None:
         if not self.page:
@@ -339,7 +390,7 @@ class MoonshotDriver(BaseDriver):
                                 const resp = await fetch(request.url, {
                                     method: request.method || "POST",
                                     credentials: "include",
-                                    referrer: request.referrer || "https://www.kimi.com/settings",
+                                    referrer: request.referrer || (window.location.origin + "/settings"),
                                     headers: {
                                         ...(request.headers || {}),
                                         "content-type": "application/json",
@@ -374,7 +425,7 @@ class MoonshotDriver(BaseDriver):
                         return out;
                     }""",
                     {
-                        "url": self.USER_SETTINGS_UPDATE_URL,
+                        "url": f"{self._get_site_origin()}{self.USER_SETTINGS_UPDATE_PATH}",
                         "body": self.MEMORY_DISABLE_UPDATE_PAYLOAD,
                         "headers": forwarded_headers,
                         "refresh": refresh_args,
@@ -1428,7 +1479,7 @@ class MoonshotDriver(BaseDriver):
             return None
 
         hostname = str(parsed.netloc or "").strip().lower()
-        if hostname not in {"www.kimi.com", "kimi.com"}:
+        if hostname not in self.SITE_HOSTS:
             return None
 
         path_parts = [part for part in str(parsed.path or "").split("/") if part]
@@ -1439,9 +1490,10 @@ class MoonshotDriver(BaseDriver):
         if not conversation_id:
             return None
 
+        scheme = str(parsed.scheme or "https").strip().lower() or "https"
         return {
             "conversation_id": conversation_id,
-            "conversation_url": f"https://www.kimi.com/chat/{conversation_id}",
+            "conversation_url": f"{scheme}://{hostname}/chat/{conversation_id}",
         }
 
     async def _get_current_conversation_info(self) -> Optional[Dict[str, str]]:
@@ -1486,15 +1538,16 @@ class MoonshotDriver(BaseDriver):
 
         cookies = await self._get_context_cookie_dict()
         headers = dict(getattr(self, "_last_followup_request_headers", {}) or {})
+        site_origin = self._get_site_origin()
         headers.setdefault("accept", "application/json, text/plain, */*")
         headers.setdefault("content-type", "application/json")
-        headers.setdefault("origin", "https://www.kimi.com")
-        headers.setdefault("referer", "https://www.kimi.com/")
+        headers.setdefault("origin", site_origin)
+        headers.setdefault("referer", f"{site_origin}/")
 
         try:
             client = await self._get_http_client()
             response = await client.post(
-                "https://www.kimi.com/apiv2/kimi.chat.v1.ChatService/DeleteChat",
+                f"{site_origin}/apiv2/kimi.chat.v1.ChatService/DeleteChat",
                 headers=headers,
                 cookies=cookies,
                 json={"chat_id": normalized_id},
@@ -2670,10 +2723,14 @@ class MoonshotDriver(BaseDriver):
             Logger.warning("Moonshot: no model items found in picker.")
             return False
 
+        seen_names: list[str] = []
         for idx in range(min(count, 30)):
             item = items.nth(idx)
             name_text = await self._read_kimi_model_item_name(item)
-            if self._normalize_text(name_text) != target_norm:
+            name_norm = self._normalize_text(name_text)
+            if name_norm and name_norm not in seen_names:
+                seen_names.append(name_norm)
+            if not self._model_name_matches(name_norm, target_norm):
                 continue
 
             try:
@@ -2687,7 +2744,7 @@ class MoonshotDriver(BaseDriver):
             deadline = time.time() + 5.0
             while time.time() < deadline:
                 current = await self._read_current_model_name()
-                if self._normalize_text(current) == target_norm:
+                if self._model_name_matches(self._normalize_text(current), target_norm):
                     return True
                 await asyncio.sleep(0.1)
 
@@ -2699,13 +2756,64 @@ class MoonshotDriver(BaseDriver):
             return False
 
         Logger.warning(f"Moonshot: target model '{target_model}' not found in picker.")
+        if seen_names:
+            Logger.warning(
+                "Moonshot: picker entries seen: " + ", ".join(repr(n) for n in seen_names)
+            )
         try:
             await self.page.keyboard.press("Escape")
         except Exception:
             pass
         return False
 
+    @classmethod
+    def _model_name_matches(cls, item_norm: str, target_norm: str) -> bool:
+        """Match a picker item name against a target model with alias support."""
+        aliases = cls.MODEL_MATCH_ALIASES.get(target_norm)
+        if aliases is None:
+            return item_norm == target_norm
+        return any(
+            item_norm == alias or item_norm.endswith(f" {alias}")
+            for alias in aliases
+        )
+
+    def _get_configured_model_friendly(self) -> str:
+        """Return the configured picker model, or '' for Auto mode.
+
+        Sanitizes legacy/broken values: option dicts saved by older builds
+        (e.g. "{'label': 'Kimi K3', ...}") and anything unrecognizable are
+        treated as Auto instead of being fed to the picker.
+        """
+        try:
+            raw = self.config_manager.get_setting("moonshot_behavior", "model")
+        except Exception:
+            raw = None
+
+        if isinstance(raw, dict):
+            raw = raw.get("value") or raw.get("label") or ""
+
+        value = str(raw or "").strip()
+        if not value or value.startswith("{") or value.lower().startswith("auto"):
+            return ""
+        return value
+
     async def set_deepthink_state(self, state: bool):
+        configured_model = self._get_configured_model_friendly()
+        if configured_model:
+            # Explicit model selection wins over the Thinking toggle.
+            current = await self._read_current_model_name()
+            Logger.debug(
+                f"Moonshot: model selection requested '{configured_model}' "
+                f"(picker currently shows '{current or '<nothing>'}')."
+            )
+            if self._normalize_text(current) != self._normalize_text(configured_model):
+                switched = await self._select_kimi_model(configured_model)
+                if not switched:
+                    Logger.warning(
+                        f"Moonshot: failed to select configured model '{configured_model}'."
+                    )
+            return
+
         current = await self._read_current_model_name()
         current_norm = self._normalize_text(current)
         instant_norm = self._normalize_text(self.MODEL_INSTANT)

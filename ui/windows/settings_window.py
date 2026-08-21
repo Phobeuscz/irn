@@ -4679,7 +4679,12 @@ class SettingsWindow(QMainWindow):
         if not expr:
             return True
 
-        parts = [part.strip() for part in str(expr).split("&&")]
+        # Top-level OR: any alternative being fully met satisfies the expression.
+        alternatives = [alt.strip() for alt in str(expr).split("||")]
+        if len(alternatives) > 1:
+            return any(self._is_dependency_met(alt) for alt in alternatives if alt)
+
+        parts = [part.strip() for part in alternatives[0].split("&&")]
         for part in parts:
             if not part:
                 continue

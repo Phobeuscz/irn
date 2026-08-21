@@ -77,6 +77,29 @@ REQUEST_CAPTURE_CDP_ONLY_OPTIONS = [
     },
 ]
 
+MOONSHOT_REGION_OVERSEAS = "overseas"
+MOONSHOT_REGION_CN = "cn"
+
+# DROPDOWN fields take plain strings (the stored value equals the visible label).
+MOONSHOT_MODEL_AUTO_LABEL = "Auto (Thinking toggle)"
+MOONSHOT_MODEL_OPTIONS = [
+    MOONSHOT_MODEL_AUTO_LABEL,
+    "Instant",
+    "Kimi K3",
+    "Kimi K3 Swarm",
+]
+
+MOONSHOT_REGION_OPTIONS = [
+    {
+        "label": "International (kimi.ai)",
+        "value": MOONSHOT_REGION_OVERSEAS,
+    },
+    {
+        "label": "China (kimi.com)",
+        "value": MOONSHOT_REGION_CN,
+    },
+]
+
 class SettingType(Enum):
     BOOLEAN = "boolean"
     STRING = "string"
@@ -499,8 +522,8 @@ SCHEMA = [
                 key="model",
                 label="Model",
                 type=SettingType.DROPDOWN,
-                default="GLM-5.2",
-                options=["GLM-5.2", "GLM-5.1", "GLM-5-Turbo", "GLM-5V-Turbo", "GLM-4.7"],
+                default="GLM-5.3",
+                options=["GLM-5.3", "GLM-5.2", "GLM-5.1", "GLM-5-Turbo", "GLM-5V-Turbo", "GLM-4.7"],
                 tooltip="Select which GLM model to use in the web UI. Not related to the API model IDs.",
                 docs_path=DOCS_GLM,
                 docs_anchor="modes-model-ids",
@@ -520,8 +543,11 @@ SCHEMA = [
                 type=SettingType.DROPDOWN,
                 default="Max",
                 options=["High", "Max"],
-                tooltip="Select GLM-5.2's Deep Think effort when Deep Think is enabled.",
-                visible_depends="glm_behavior.model==GLM-5.2&&glm_behavior.enable_deepthink",
+                tooltip="Select the Deep Think effort for GLM-5.2 / GLM-5.3 when Deep Think is enabled.",
+                visible_depends=(
+                    "glm_behavior.model==GLM-5.2&&glm_behavior.enable_deepthink"
+                    "||glm_behavior.model==GLM-5.3&&glm_behavior.enable_deepthink"
+                ),
                 docs_path=DOCS_GLM,
                 docs_anchor="deep-think-effort",
             ),
@@ -762,6 +788,30 @@ SCHEMA = [
         key="moonshot_behavior",
         fields=[
             SettingField(
+                key="site_region",
+                label="Kimi Site Region",
+                type=SettingType.SWITCHER,
+                default=MOONSHOT_REGION_OVERSEAS,
+                options=MOONSHOT_REGION_OPTIONS,
+                tooltip=(
+                    "Pick which Kimi domain to use: kimi.ai for international accounts "
+                    "or kimi.com for Chinese ones. Sessions already signed in on either "
+                    "domain keep working."
+                ),
+            ),
+            SettingField(
+                key="model",
+                label="Model",
+                type=SettingType.DROPDOWN,
+                default=MOONSHOT_MODEL_AUTO_LABEL,
+                options=MOONSHOT_MODEL_OPTIONS,
+                tooltip=(
+                    "Pick a specific model in Kimi's picker. Auto keeps the classic "
+                    "behavior where the Enable Thinking toggle switches between "
+                    "Instant and Thinking. An explicit model always wins over the toggle."
+                ),
+            ),
+            SettingField(
                 key="request_capture_mode",
                 label="Request Capture Mode",
                 type=SettingType.SWITCHER,
@@ -777,7 +827,10 @@ SCHEMA = [
                 label="Enable Thinking",
                 type=SettingType.BOOLEAN,
                 default=False,
-                tooltip="Switch Kimi between K2.6 Instant and K2.6 Thinking before sending.",
+                tooltip=(
+                    "Switch Kimi between Instant and Thinking before sending. "
+                    "Only applies when Model is set to Auto."
+                ),
                 docs_path=DOCS_MOONSHOT,
                 docs_anchor="enable-thinking",
             ),
@@ -3004,8 +3057,8 @@ SCHEMA = [
                     "`reasoning.effort`) to control provider reasoning for that request. "
                     "No effort, Minimum, and Low map to chat/off for most providers; "
                     "Medium and above map to reasoning/on. Google AI Studio maps efforts "
-                    "to its Thinking Level controls, and GLM-5.2 can map High/Max efforts "
-                    "to its Deep Think effort menu."
+                    "to its Thinking Level controls, and GLM-5.2 / GLM-5.3 can map "
+                    "High/Max efforts to their Deep Think effort menu."
                 ),
                 front_tooltip="Allow API requests to set supported providers' reasoning level.",
                 docs_path=DOCS_NETWORK,
@@ -3418,7 +3471,7 @@ PROVIDER_BEHAVIOR_GROUPS = {
         {"title": "Quirks", "icon": "bug.svg", "fields": ["ui_click_timeout", "post_action_delay", "message_send_timeout", "completion_request_timeout", "first_chunk_timeout", "refresh_after_generation"]},
     ],
     "moonshot_behavior": [
-        {"title": "Core", "icon": "settings.svg", "fields": ["request_capture_mode", "enable_deepthink", "send_deepthink", "search_and_think_note", "enable_search"]},
+        {"title": "Core", "icon": "settings.svg", "fields": ["site_region", "model", "request_capture_mode", "enable_deepthink", "send_deepthink", "search_and_think_note", "enable_search"]},
         {"title": "Uploads", "icon": "upload.svg", "fields": ["send_as_text_file", "file_upload_timeout", "text_file_filler"]},
         {"title": "Retry and Reuse", "icon": "rotate-ccw.svg", "fields": ["clean_regeneration", "auto_delete_chats", "auto_delete_chats_warning", "multi_slot_cache"]},
         {"title": "Blocked Responses", "icon": "shield-ban.svg", "fields": ["anti_censorship"]},

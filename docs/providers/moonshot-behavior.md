@@ -4,7 +4,10 @@ icon: providers/moonshot
 
 # :providers-moonshot: Moonshot Behavior
 
-This page covers the toggles and options that control how IntenseRP interacts with **Moonshot** (`kimi.com`).
+This page covers the toggles and options that control how IntenseRP interacts with **Moonshot** (`kimi.ai`).
+
+!!! note "Kimi domains"
+    Kimi runs the same app on two regional domains: **kimi.ai** (overseas, the default) and **kimi.com** (China). IntenseRP starts new sessions on `kimi.ai` and accepts both domains for existing sessions, so accounts living on either domain keep working.
 
 !!! note "Model IDs"
     Moonshot exposes three API behavior presets:
@@ -12,6 +15,19 @@ This page covers the toggles and options that control how IntenseRP interacts wi
     These are behavior modes, not separate backend model selection.
 
 ---
+
+## :material-earth: Kimi Site Region
+
+:material-arrow-right: **Settings** -> **Provider Behavior** -> **Moonshot** -> **Kimi Site Region**
+
+Chooses which Kimi domain new sessions start on:
+
+| Option | Domain | For |
+|--------|--------|-----|
+| **International (kimi.ai)** | `kimi.ai` | The default. Use this unless your account lives on the Chinese site. |
+| **China (kimi.com)** | `kimi.com` | Accounts registered on the Chinese Kimi site. |
+
+The switch only decides the *starting* domain. Once a session is live, IntenseRP always talks to whichever host the page actually uses, so a saved session from the other region keeps working even if the switch is set differently.
 
 ## :material-call-split: Request Capture Mode
 
@@ -51,10 +67,26 @@ That said, Google is still Google. It may decide to ask for extra confirmation, 
 
 Kimi exposes reasoning through model mode selection in the web UI.
 
+### Model
+
+:material-arrow-right: **Settings** -> **Provider Behavior** -> **Moonshot** -> **Model**
+
+Selects a specific entry in Kimi's model picker:
+
+| Option | Picker entry |
+|--------|--------------|
+| **Auto (Thinking toggle)** | No fixed selection - the Enable Thinking toggle decides |
+| **Instant** | Kimi's fast model (currently labeled `Instant`) |
+| **Kimi K3** | The K3 flagship |
+| **Kimi K3 Swarm** | The K3 Swarm variant |
+
+An explicit model always wins over the Enable Thinking toggle: when one is selected, IntenseRP makes sure that exact picker entry is active and leaves the Thinking toggle alone. Matching is label-tolerant, so older rollouts that still show `K2.6 Instant` / `K2.6 Thinking` keep working.
+
 ### Enable Thinking
 
-Switches Kimi to **K2.6 Thinking** before sending a request.
-When disabled, IntenseRP switches to **K2.6 Instant**.
+Switches Kimi to its Thinking model before sending a request.
+When disabled, IntenseRP switches to **Instant**.
+Only applies when **Model** is set to **Auto (Thinking toggle)**.
 
 :material-arrow-right: **Settings** -> **Provider Behavior** -> **Moonshot** -> **Enable Thinking**
 
@@ -184,6 +216,8 @@ All macros are stripped before sending.
 
 | Setting | What It Does | Default |
 |---------|--------------|---------|
+| **Kimi Site Region** | Picks the starting domain (kimi.ai or kimi.com) | International (kimi.ai) |
+| **Model** | Picks a specific model (Instant, Kimi K3, Kimi K3 Swarm) | Auto (Thinking toggle) |
 | **Request Capture Mode** | Captures responses with Replay or CDP Teeing | Replay |
 | **Enable Thinking** | Switches Kimi mode between Instant and Thinking | Off |
 | **Send Thinking** | Includes reasoning in response | Off |

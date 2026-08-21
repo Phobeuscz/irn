@@ -10,15 +10,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/LyubomirT/intense-rp-next/releases"><img alt="Release" src="https://img.shields.io/github/v/release/LyubomirT/intense-rp-next?style=flat-square" /></a>
-  <a href="https://github.com/LyubomirT/intense-rp-next/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/LyubomirT/intense-rp-next/total?style=flat-square" /></a>
-  <a href="https://github.com/LyubomirT/intense-rp-next/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/LyubomirT/intense-rp-next?style=flat-square" /></a>
-  <a href="https://github.com/LyubomirT/intense-rp-next/issues"><img alt="Issues" src="https://img.shields.io/github/issues/LyubomirT/intense-rp-next?style=flat-square" /></a>
+  <a href="https://github.com/Phobeuscz/irn/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/Phobeuscz/irn?style=flat-square" /></a>
+  <a href="https://github.com/Phobeuscz/irn/issues"><img alt="Issues" src="https://img.shields.io/github/issues/Phobeuscz/irn?style=flat-square" /></a>
   <img alt="Python" src="https://img.shields.io/badge/python-3.12%2B-3776AB?style=flat-square&logo=python&logoColor=white" />
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/LyubomirT/intense-rp-next?style=flat-square" /></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Phobeuscz/irn?style=flat-square" /></a>
   <a href="https://intense-rp-next.readthedocs.io/en/latest/"><img alt="Docs" src="https://img.shields.io/website?url=https%3A%2F%2Fintense-rp-next.readthedocs.io%2Fen%2Flatest%2F&label=docs&style=flat-square" /></a>
-  <img alt="Status" src="https://img.shields.io/badge/status-archived-6a737d?style=flat-square" />
-  <a href="https://discord.gg/4Gvjk2RdsK"><img alt="Discord" src="https://img.shields.io/badge/Discord-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
 </p>
 
 <p align="center">
@@ -27,9 +23,6 @@
   <a href="#connect-sillytavern-or-any-openai-compatible-client">Client setup</a> ·
   <a href="#provider-support">Providers</a> ·
   <a href="#documentation">Documentation</a> ·
-  <a href="https://github.com/LyubomirT/intense-rp-next/releases">Releases</a> ·
-  <a href="https://github.com/LyubomirT/intense-rp-next/issues">Issues</a> ·
-  <a href="https://discord.gg/4Gvjk2RdsK">Discord Server</a>
 </p>
 
 <h1 align="center">🎬 Preview Video</h1>
@@ -40,12 +33,8 @@ https://github.com/user-attachments/assets/ebf1bfcd-3b23-4614-b584-174791bcb004
 
 
 <p align="center">
-  <a href="https://github.com/LyubomirT/intense-rp-next/stargazers"><img src=".github/svgs/star2.svg" alt="Leave a Star" height="42"></a>
+  <a href="https://github.com/Phobeuscz/irn"><img src=".github/svgs/star2.svg" alt="Leave a Star" height="42"></a>
 </p>
-
-> [!IMPORTANT]
-> This project is being archived and is no longer actively maintained. The code and docs remain available for historical/reference use. Provider websites can change without notice, so existing integrations may break. Use this only with services, accounts, and data you are authorized to access, and follow the applicable provider terms.
-
 
 ## Welcome 👋
 
@@ -56,7 +45,23 @@ It can mirror provider web UI controls such as reasoning toggles, search, file u
   
 ## Start here! 🎁
 
-1. Download a release (see [Releases](https://github.com/LyubomirT/intense-rp-next/releases)) and run it (or run from source)
+1. Install From source
+
+Requirements: Python 3.12+ (3.13 recommended)
+
+```bash
+git clone https://github.com/Phobeuscz/irn.git   # Or download and extract in zip
+cd intense-rp-next
+
+python -m venv venv
+
+source venv/bin/activate  # Linux/Mac
+# or: venv\\Scripts\\activate  # Windows
+
+pip install -r requirements.txt
+python main.py
+```
+
 2. Click **Start** and log in when the browser opens
 3. Point your SillyTavern client at `http://127.0.0.1:7777/v1` (default) and pick the matching provider model IDs (`deepseek-*`, `glm-*`, `moonshot-*`, `qwen-*`, etc.)
 
@@ -117,57 +122,7 @@ If you want to compare, have a look:
 | Automation | Selenium-based | Playwright (Patchright) |
 | Response capture | HTML parsing | Structured browser response handling |
 
-## Quick start
 
-> [!TIP]
-> First launch can take a bit - v2 will verify/download its browser components.
-
-<details>
-<summary><strong>Windows</strong> (recommended)</summary>
-
-1. Download the latest `intenserp-next-v2-win32-x64.zip` from [Releases](https://github.com/LyubomirT/intense-rp-next/releases)
-2. Extract it anywhere
-3. Open the `intense-rp-next` folder and run `intenserp-next-v2.exe`
-4. Click **Start** and wait for the browser to open
-
-</details>
-
-<details>
-<summary><strong>Linux</strong></summary>
-
-1. Download the latest `intenserp-next-v2-linux-x64.tar.gz` from [Releases](https://github.com/LyubomirT/intense-rp-next/releases)
-2. Extract and run:
-
-```bash
-tar -xzf intenserp-next-v2-linux-x64.tar.gz
-cd intense-rp-next
-chmod +x intenserp-next-v2
-./intenserp-next-v2
-```
-
-If it complains about missing libraries, you may need Qt6 deps installed on your system. The best way is to install the `qt6-base` package via your package manager, but if it doesn't stop you can just install the missing libs manually.
-
-</details>
-
-<details>
-<summary><strong>From source</strong> (for devs)</summary>
-
-Requirements: Python 3.12+ (3.13 recommended)
-
-```bash
-git clone https://github.com/LyubomirT/intense-rp-next.git
-cd intense-rp-next
-
-python -m venv venv
-
-source venv/bin/activate  # Linux/Mac
-# or: venv\\Scripts\\activate  # Windows
-
-pip install -r requirements.txt
-python main.py
-```
-
-</details>
 
 ## Connect SillyTavern (or any OpenAI-compatible client)
 
@@ -275,25 +230,13 @@ python -m pip install -r docs/requirements.txt
 zensical serve
 ```
 
-## Project status
-
-IntenseRP Next v2 is being archived.
-
-Existing releases and docs remain available for people who already use the project or want to learn from the code. Community links may remain online, but no active maintenance or support response is promised.
-
 ## Security and privacy notes
 
 - IntenseRP is designed for local or LAN use. Do not expose it to the public internet unless you know what you're doing.
 - If you enable **Available on LAN**, consider enabling **API Keys** too.
 - Your config directory contains sensitive data (credentials, API keys, session cookies). Treat it like a password vault.
 
-## Contributing 🤝
-
-This repository is being archived, so new issues and PRs may not be reviewed.
-
-Existing issues, release notes, and docs remain available as reference. If you fork or continue the project privately, please review the provider terms, security assumptions, and maintenance risk before relying on it.
-
-## Contributors ❤️
+## Contributors of the original version ❤️
 
 | <a href="https://github.com/LyubomirT"><img src="https://avatars.githubusercontent.com/u/127299159?s=500&v=4" width="80" height="80" alt="LyubomirT" /></a> | <a href="https://github.com/Omega-Slender"><img src="https://avatars.githubusercontent.com/u/134849645?s=500&v=4" width="80" height="80" alt="Omega-Slender" /></a> | <a href="https://github.com/Deaquay"><img src="https://avatars.githubusercontent.com/u/103206423?s=500&v=4" width="80" height="80" alt="Deaquay" /></a> | <a href="https://github.com/Targren"><img src="https://avatars.githubusercontent.com/u/11566412?s=500&v=4" width="80" height="80" alt="Targren" /></a> | <a href="https://github.com/fushigipururin"><img src="https://avatars.githubusercontent.com/u/96440827?s=500&v=4" width="80" height="80" alt="fushigipururin" /></a> | <a href="https://github.com/Vova12344weq"><img src="https://avatars.githubusercontent.com/u/131772052?s=500&v=4" width="80" height="80" alt="Vova12344weq" /></a> |
 |:---:|:---:|:---:|:---:|:---:|:---:|
@@ -311,12 +254,13 @@ IntenseRP Next v2 is licensed under the MIT License. See the [LICENSE](LICENSE) 
 
 ## Credits
 
+- Me ( Fixing shit, GLM5.3, Fixed Moonshot API, added Kimi K3 support )
 - FastAPI, Pydantic, Uvicorn
 - PySide6 (Qt)
 - Playwright + Patchright
 - Feather Icons / Lucide Icons
 - SillyTavern (client ecosystem)
 - IntenseRP API (Omega-Slender) - original inspiration
-- Me (LyubomirT) - for doing all the work :D
+- (LyubomirT) - for doing all the work :D
 - RossAscends (for STMP)
 - Developers of Zensical (docs generator)
