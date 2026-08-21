@@ -10,13 +10,12 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/LyubomirT/intense-rp-next/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/LyubomirT/intense-rp-next?style=flat-square" /></a>
-  <a href="https://github.com/LyubomirT/intense-rp-next/issues"><img alt="Issues" src="https://img.shields.io/github/issues/LyubomirT/intense-rp-next?style=flat-square" /></a>
+  <a href="https://github.com/Phobeuscz/irn/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/Phobeuscz/irn?style=flat-square" /></a>
+  <a href="https://github.com/Phobeuscz/irn/issues"><img alt="Issues" src="https://img.shields.io/github/issues/Phobeuscz/irn?style=flat-square" /></a>
   <img alt="Python" src="https://img.shields.io/badge/python-3.12%2B-3776AB?style=flat-square&logo=python&logoColor=white" />
-  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/LyubomirT/intense-rp-next?style=flat-square" /></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Phobeuscz/irn?style=flat-square" /></a>
   <a href="https://intense-rp-next.readthedocs.io/en/latest/"><img alt="Docs" src="https://img.shields.io/website?url=https%3A%2F%2Fintense-rp-next.readthedocs.io%2Fen%2Flatest%2F&label=docs&style=flat-square" /></a>
   <img alt="Status" src="https://img.shields.io/badge/status-archived-6a737d?style=flat-square" />
-  <a href="https://discord.gg/4Gvjk2RdsK"><img alt="Discord" src="https://img.shields.io/badge/Discord-5865F2?style=flat-square&logo=discord&logoColor=white" /></a>
 </p>
 
 <p align="center">
@@ -25,9 +24,7 @@
   <a href="#connect-sillytavern-or-any-openai-compatible-client">Client setup</a> ·
   <a href="#provider-support">Providers</a> ·
   <a href="#documentation">Documentation</a> ·
-  <a href="https://github.com/LyubomirT/intense-rp-next/releases">Releases</a> ·
   <a href="https://github.com/LyubomirT/intense-rp-next/issues">Issues</a> ·
-  <a href="https://discord.gg/4Gvjk2RdsK">Discord Server</a>
 </p>
 
 <h1 align="center">🎬 Preview Video</h1>
