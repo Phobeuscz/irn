@@ -43,10 +43,6 @@ https://github.com/user-attachments/assets/ebf1bfcd-3b23-4614-b584-174791bcb004
   <a href="https://github.com/LyubomirT/intense-rp-next/stargazers"><img src=".github/svgs/star2.svg" alt="Leave a Star" height="42"></a>
 </p>
 
-> [!IMPORTANT]
-> This project is being archived and is no longer actively maintained. The code and docs remain available for historical/reference use. Provider websites can change without notice, so existing integrations may break. Use this only with services, accounts, and data you are authorized to access, and follow the applicable provider terms.
-
-
 ## Welcome 👋
 
 If you're here because you need a local bridge between SillyTavern and a browser-based provider chat, this repository may still be useful as reference.
