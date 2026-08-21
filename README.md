@@ -15,7 +15,6 @@
   <img alt="Python" src="https://img.shields.io/badge/python-3.12%2B-3776AB?style=flat-square&logo=python&logoColor=white" />
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/Phobeuscz/irn?style=flat-square" /></a>
   <a href="https://intense-rp-next.readthedocs.io/en/latest/"><img alt="Docs" src="https://img.shields.io/website?url=https%3A%2F%2Fintense-rp-next.readthedocs.io%2Fen%2Flatest%2F&label=docs&style=flat-square" /></a>
-  <img alt="Status" src="https://img.shields.io/badge/status-archived-6a737d?style=flat-square" />
 </p>
 
 <p align="center">
@@ -24,7 +23,6 @@
   <a href="#connect-sillytavern-or-any-openai-compatible-client">Client setup</a> ·
   <a href="#provider-support">Providers</a> ·
   <a href="#documentation">Documentation</a> ·
-  <a href="https://github.com/LyubomirT/intense-rp-next/issues">Issues</a> ·
 </p>
 
 <h1 align="center">🎬 Preview Video</h1>
@@ -52,7 +50,7 @@ It can mirror provider web UI controls such as reasoning toggles, search, file u
 Requirements: Python 3.12+ (3.13 recommended)
 
 ```bash
-git clone https://github.com/LyubomirT/intense-rp-next.git   # Or download and extract in zip
+git clone https://github.com/Phobeuscz/irn.git   # Or download and extract in zip
 cd intense-rp-next
 
 python -m venv venv
@@ -232,23 +230,11 @@ python -m pip install -r docs/requirements.txt
 zensical serve
 ```
 
-## Project status
-
-IntenseRP Next v2 is being archived.
-
-Existing releases and docs remain available for people who already use the project or want to learn from the code. Community links may remain online, but no active maintenance or support response is promised.
-
 ## Security and privacy notes
 
 - IntenseRP is designed for local or LAN use. Do not expose it to the public internet unless you know what you're doing.
 - If you enable **Available on LAN**, consider enabling **API Keys** too.
 - Your config directory contains sensitive data (credentials, API keys, session cookies). Treat it like a password vault.
-
-## Contributing 🤝
-
-This repository is being archived, so new issues and PRs may not be reviewed.
-
-Existing issues, release notes, and docs remain available as reference. If you fork or continue the project privately, please review the provider terms, security assumptions, and maintenance risk before relying on it.
 
 ## Contributors of the original version ❤️
 
