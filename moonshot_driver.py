@@ -122,13 +122,26 @@ class MoonshotDriver(BaseDriver):
         self._last_followup_request_headers: Dict[str, str] = {}
 
     def get_start_url(self) -> str:
-        return f"{self.SITE_ORIGIN}/"
+        return f"{self._get_configured_site_origin()}/"
+
+    def _get_configured_site_origin(self) -> str:
+        """Return the Kimi origin preferred by the user's region setting."""
+        try:
+            region = str(
+                self.config_manager.get_setting("moonshot_behavior", "site_region") or ""
+            ).strip().lower()
+        except Exception:
+            region = ""
+        if region == "cn":
+            return self.SITE_ORIGIN_PEER
+        return self.SITE_ORIGIN
 
     def _get_site_origin(self) -> str:
         """Return the origin the live session currently lives on.
 
         Kimi migrates sessions between kimi.com (CN) and kimi.ai (overseas),
         so API calls must target whichever host the page actually uses.
+        Falls back to the user's configured region when unknown.
         """
         if self.page:
             try:
@@ -138,7 +151,7 @@ class MoonshotDriver(BaseDriver):
                     return f"{parsed.scheme}://{netloc}"
             except Exception:
                 pass
-        return self.SITE_ORIGIN
+        return self._get_configured_site_origin()
 
     async def before_initial_navigation(self) -> None:
         if not self.page:

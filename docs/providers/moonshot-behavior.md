@@ -16,6 +16,19 @@ This page covers the toggles and options that control how IntenseRP interacts wi
 
 ---
 
+## :material-earth: Kimi Site Region
+
+:material-arrow-right: **Settings** -> **Provider Behavior** -> **Moonshot** -> **Kimi Site Region**
+
+Chooses which Kimi domain new sessions start on:
+
+| Option | Domain | For |
+|--------|--------|-----|
+| **International (kimi.ai)** | `kimi.ai` | The default. Use this unless your account lives on the Chinese site. |
+| **China (kimi.com)** | `kimi.com` | Accounts registered on the Chinese Kimi site. |
+
+The switch only decides the *starting* domain. Once a session is live, IntenseRP always talks to whichever host the page actually uses, so a saved session from the other region keeps working even if the switch is set differently.
+
 ## :material-call-split: Request Capture Mode
 
 Controls how IntenseRP captures Moonshot's streaming response.
@@ -187,6 +200,7 @@ All macros are stripped before sending.
 
 | Setting | What It Does | Default |
 |---------|--------------|---------|
+| **Kimi Site Region** | Picks the starting domain (kimi.ai or kimi.com) | International (kimi.ai) |
 | **Request Capture Mode** | Captures responses with Replay or CDP Teeing | Replay |
 | **Enable Thinking** | Switches Kimi mode between Instant and Thinking | Off |
 | **Send Thinking** | Includes reasoning in response | Off |

@@ -77,6 +77,20 @@ REQUEST_CAPTURE_CDP_ONLY_OPTIONS = [
     },
 ]
 
+MOONSHOT_REGION_OVERSEAS = "overseas"
+MOONSHOT_REGION_CN = "cn"
+
+MOONSHOT_REGION_OPTIONS = [
+    {
+        "label": "International (kimi.ai)",
+        "value": MOONSHOT_REGION_OVERSEAS,
+    },
+    {
+        "label": "China (kimi.com)",
+        "value": MOONSHOT_REGION_CN,
+    },
+]
+
 class SettingType(Enum):
     BOOLEAN = "boolean"
     STRING = "string"
@@ -764,6 +778,18 @@ SCHEMA = [
         name="Moonshot Behavior",
         key="moonshot_behavior",
         fields=[
+            SettingField(
+                key="site_region",
+                label="Kimi Site Region",
+                type=SettingType.SWITCHER,
+                default=MOONSHOT_REGION_OVERSEAS,
+                options=MOONSHOT_REGION_OPTIONS,
+                tooltip=(
+                    "Pick which Kimi domain to use: kimi.ai for international accounts "
+                    "or kimi.com for Chinese ones. Sessions already signed in on either "
+                    "domain keep working."
+                ),
+            ),
             SettingField(
                 key="request_capture_mode",
                 label="Request Capture Mode",
@@ -3421,7 +3447,7 @@ PROVIDER_BEHAVIOR_GROUPS = {
         {"title": "Quirks", "icon": "bug.svg", "fields": ["ui_click_timeout", "post_action_delay", "message_send_timeout", "completion_request_timeout", "first_chunk_timeout", "refresh_after_generation"]},
     ],
     "moonshot_behavior": [
-        {"title": "Core", "icon": "settings.svg", "fields": ["request_capture_mode", "enable_deepthink", "send_deepthink", "search_and_think_note", "enable_search"]},
+        {"title": "Core", "icon": "settings.svg", "fields": ["site_region", "request_capture_mode", "enable_deepthink", "send_deepthink", "search_and_think_note", "enable_search"]},
         {"title": "Uploads", "icon": "upload.svg", "fields": ["send_as_text_file", "file_upload_timeout", "text_file_filler"]},
         {"title": "Retry and Reuse", "icon": "rotate-ccw.svg", "fields": ["clean_regeneration", "auto_delete_chats", "auto_delete_chats_warning", "multi_slot_cache"]},
         {"title": "Blocked Responses", "icon": "shield-ban.svg", "fields": ["anti_censorship"]},
