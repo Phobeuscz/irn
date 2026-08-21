@@ -146,6 +146,27 @@ See: [:material-key: Login & Sessions](../features/login-sessions.md)
 
 ---
 
+## :material-shield-alert: Mid-Chat Verification & Silent Refusals
+
+GLM can also demand verification *during* normal chatting, not just at login. When z.ai's risk control fires, the page loads Alibaba's **FeiLin** CAPTCHA SDK (this also wipes the browser DevTools console - IntenseRP neutralizes that so your logs survive). Depending on what triggered it, requests then fail in one of two ways:
+
+### Verification required (CAPTCHA gate)
+
+The backend answers with codes like `FRONTEND_CAPTCHA_REQUIRED`, `CAPTCHA_VERIFICATION_FAILED`, or `RISK_CONTROL_BLOCKED`. IntenseRP shows a desktop notification and logs the exact code.
+
+**What to do:** solve the CAPTCHA popup in the GLM browser window, then retry. If challenges fire often, switch **Request Capture Mode** to **CDP Teeing** (the request then comes from the real browser instead of being replayed by Python) and slow down request pacing.
+
+### Silent refusal (moderation gate)
+
+For prompts GLM's server-side moderation declines, the completion stream contains **no content and no error** - just an immediate `done` frame. IntenseRP detects this metadata-only response, warns about it in the log, and dumps the raw body head for diagnosis. There is no error code to read because GLM does not send one.
+
+**What to do:** rephrase. The classifier sees the **entire conversation history on every request**, so old explicit turns keep triggering refusals later - trim history in your client, condense spicy turns, and keep character cards euphemistic. Rotating to another saved account also helps, since refusal pressure is per-account.
+
+!!! note "How errors surface"
+    All structured GLM errors (`SENSITIVE`, risk control, CAPTCHA codes, generic API errors) are forwarded to your client as OpenAI-style error events and logged with their codes. If a response finishes without any content, the log says so explicitly instead of reporting success.
+
+---
+
 ## :material-refresh: Reuse Matching Chat Instability
 
 Reuse Matching Chat (reusing the same chat when you send an identical prompt) is **unreliable** with GLM Chat. The "Regenerate" action sometimes errors out even though GLM actually processes the request normally. In 99.9% of cases it will not even appear at all.

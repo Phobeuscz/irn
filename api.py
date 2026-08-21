@@ -2121,7 +2121,7 @@ class API:
                         if request_type == "chat"
                         else _normalize_text_completion_prompt(request.prompt)
                     )
-                    async for chunk in driver.generate_response(
+                    driver_gen = driver.generate_response(
                         message=driver_message,
                         model=driver_model,
                         stream=request.stream,
@@ -2129,7 +2129,8 @@ class API:
                         top_p=request.top_p,
                         max_tokens=request.max_tokens,
                         abort_event=abort_event,
-                    ):
+                    )
+                    async for chunk in driver_gen:
                         client_chunk = (
                             _set_openai_sse_chunk_model(chunk, request_model)
                             if should_rewrite_chunk_model
@@ -2160,6 +2161,14 @@ class API:
                             buffered.append(client_chunk)
                 except Exception as e:
                     early_error_message = str(e)
+                finally:
+                    # Close the driver's async generator deterministically so its
+                    # cleanup runs here instead of at GC time (avoids
+                    # "async generator ignored GeneratorExit" noise on retries).
+                    try:
+                        await driver_gen.aclose()
+                    except Exception:
+                        pass
 
                 if abort_event.is_set():
                     break

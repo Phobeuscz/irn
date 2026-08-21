@@ -499,8 +499,8 @@ SCHEMA = [
                 key="model",
                 label="Model",
                 type=SettingType.DROPDOWN,
-                default="GLM-5.2",
-                options=["GLM-5.2", "GLM-5.1", "GLM-5-Turbo", "GLM-5V-Turbo", "GLM-4.7"],
+                default="GLM-5.3",
+                options=["GLM-5.3", "GLM-5.2", "GLM-5.1", "GLM-5-Turbo", "GLM-5V-Turbo", "GLM-4.7"],
                 tooltip="Select which GLM model to use in the web UI. Not related to the API model IDs.",
                 docs_path=DOCS_GLM,
                 docs_anchor="modes-model-ids",
@@ -520,8 +520,11 @@ SCHEMA = [
                 type=SettingType.DROPDOWN,
                 default="Max",
                 options=["High", "Max"],
-                tooltip="Select GLM-5.2's Deep Think effort when Deep Think is enabled.",
-                visible_depends="glm_behavior.model==GLM-5.2&&glm_behavior.enable_deepthink",
+                tooltip="Select the Deep Think effort for GLM-5.2 / GLM-5.3 when Deep Think is enabled.",
+                visible_depends=(
+                    "glm_behavior.model==GLM-5.2&&glm_behavior.enable_deepthink"
+                    "||glm_behavior.model==GLM-5.3&&glm_behavior.enable_deepthink"
+                ),
                 docs_path=DOCS_GLM,
                 docs_anchor="deep-think-effort",
             ),
@@ -3004,8 +3007,8 @@ SCHEMA = [
                     "`reasoning.effort`) to control provider reasoning for that request. "
                     "No effort, Minimum, and Low map to chat/off for most providers; "
                     "Medium and above map to reasoning/on. Google AI Studio maps efforts "
-                    "to its Thinking Level controls, and GLM-5.2 can map High/Max efforts "
-                    "to its Deep Think effort menu."
+                    "to its Thinking Level controls, and GLM-5.2 / GLM-5.3 can map "
+                    "High/Max efforts to their Deep Think effort menu."
                 ),
                 front_tooltip="Allow API requests to set supported providers' reasoning level.",
                 docs_path=DOCS_NETWORK,
