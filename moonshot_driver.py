@@ -2723,10 +2723,14 @@ class MoonshotDriver(BaseDriver):
             Logger.warning("Moonshot: no model items found in picker.")
             return False
 
+        seen_names: list[str] = []
         for idx in range(min(count, 30)):
             item = items.nth(idx)
             name_text = await self._read_kimi_model_item_name(item)
-            if not self._model_name_matches(self._normalize_text(name_text), target_norm):
+            name_norm = self._normalize_text(name_text)
+            if name_norm and name_norm not in seen_names:
+                seen_names.append(name_norm)
+            if not self._model_name_matches(name_norm, target_norm):
                 continue
 
             try:
@@ -2752,6 +2756,10 @@ class MoonshotDriver(BaseDriver):
             return False
 
         Logger.warning(f"Moonshot: target model '{target_model}' not found in picker.")
+        if seen_names:
+            Logger.warning(
+                "Moonshot: picker entries seen: " + ", ".join(repr(n) for n in seen_names)
+            )
         try:
             await self.page.keyboard.press("Escape")
         except Exception:
@@ -2781,6 +2789,10 @@ class MoonshotDriver(BaseDriver):
         if configured_model:
             # Explicit model selection wins over the Thinking toggle.
             current = await self._read_current_model_name()
+            Logger.debug(
+                f"Moonshot: model selection requested '{configured_model}' "
+                f"(picker currently shows '{current or '<nothing>'}')."
+            )
             if self._normalize_text(current) != self._normalize_text(configured_model):
                 switched = await self._select_kimi_model(configured_model)
                 if not switched:
