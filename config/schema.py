@@ -80,6 +80,26 @@ REQUEST_CAPTURE_CDP_ONLY_OPTIONS = [
 MOONSHOT_REGION_OVERSEAS = "overseas"
 MOONSHOT_REGION_CN = "cn"
 
+MOONSHOT_MODEL_AUTO = ""
+MOONSHOT_MODEL_OPTIONS = [
+    {
+        "label": "Auto (Thinking toggle)",
+        "value": MOONSHOT_MODEL_AUTO,
+    },
+    {
+        "label": "Instant",
+        "value": "Instant",
+    },
+    {
+        "label": "Kimi K3",
+        "value": "Kimi K3",
+    },
+    {
+        "label": "Kimi K3 Swarm",
+        "value": "Kimi K3 Swarm",
+    },
+]
+
 MOONSHOT_REGION_OPTIONS = [
     {
         "label": "International (kimi.ai)",
@@ -791,6 +811,18 @@ SCHEMA = [
                 ),
             ),
             SettingField(
+                key="model",
+                label="Model",
+                type=SettingType.DROPDOWN,
+                default=MOONSHOT_MODEL_AUTO,
+                options=MOONSHOT_MODEL_OPTIONS,
+                tooltip=(
+                    "Pick a specific model in Kimi's picker. Auto keeps the classic "
+                    "behavior where the Enable Thinking toggle switches between "
+                    "Instant and Thinking. An explicit model always wins over the toggle."
+                ),
+            ),
+            SettingField(
                 key="request_capture_mode",
                 label="Request Capture Mode",
                 type=SettingType.SWITCHER,
@@ -806,7 +838,10 @@ SCHEMA = [
                 label="Enable Thinking",
                 type=SettingType.BOOLEAN,
                 default=False,
-                tooltip="Switch Kimi between K2.6 Instant and K2.6 Thinking before sending.",
+                tooltip=(
+                    "Switch Kimi between Instant and Thinking before sending. "
+                    "Only applies when Model is set to Auto."
+                ),
                 docs_path=DOCS_MOONSHOT,
                 docs_anchor="enable-thinking",
             ),
@@ -3447,7 +3482,7 @@ PROVIDER_BEHAVIOR_GROUPS = {
         {"title": "Quirks", "icon": "bug.svg", "fields": ["ui_click_timeout", "post_action_delay", "message_send_timeout", "completion_request_timeout", "first_chunk_timeout", "refresh_after_generation"]},
     ],
     "moonshot_behavior": [
-        {"title": "Core", "icon": "settings.svg", "fields": ["site_region", "request_capture_mode", "enable_deepthink", "send_deepthink", "search_and_think_note", "enable_search"]},
+        {"title": "Core", "icon": "settings.svg", "fields": ["site_region", "model", "request_capture_mode", "enable_deepthink", "send_deepthink", "search_and_think_note", "enable_search"]},
         {"title": "Uploads", "icon": "upload.svg", "fields": ["send_as_text_file", "file_upload_timeout", "text_file_filler"]},
         {"title": "Retry and Reuse", "icon": "rotate-ccw.svg", "fields": ["clean_regeneration", "auto_delete_chats", "auto_delete_chats_warning", "multi_slot_cache"]},
         {"title": "Blocked Responses", "icon": "shield-ban.svg", "fields": ["anti_censorship"]},

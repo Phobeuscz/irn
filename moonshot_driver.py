@@ -69,8 +69,24 @@ class MoonshotDriver(BaseDriver):
         "x-traffic-id",
     }
     CONNECT_MAX_FRAME_BYTES = 8 * 1024 * 1024
-    MODEL_INSTANT = "K2.6 Instant"
+    MODEL_INSTANT = "Instant"
     MODEL_THINKING = "K2.6 Thinking"
+    MODEL_K3 = "Kimi K3"
+    MODEL_K3_SWARM = "Kimi K3 Swarm"
+    # Picker labels change between Kimi rollouts ("K2.6 Instant" -> "Instant"),
+    # so each known model maps to accepted normalized-name aliases.
+    MODEL_MATCH_ALIASES = {
+        "instant": ("instant",),
+        "k2.6 instant": ("instant",),
+        "kimi instant": ("instant",),
+        "thinking": ("thinking",),
+        "k2.6 thinking": ("thinking",),
+        "kimi thinking": ("thinking",),
+        "kimi k3": ("kimi k3", "k3"),
+        "k3": ("k3",),
+        "kimi k3 swarm": ("kimi k3 swarm", "k3 swarm"),
+        "k3 swarm": ("k3 swarm",),
+    }
     MODEL_CHAT_API = "moonshot-chat"
     MODEL_REASONER_API = "moonshot-reasoner"
     INTERCEPT_FIRST_CHUNK_TIMEOUT_S = 45.0
@@ -2710,7 +2726,7 @@ class MoonshotDriver(BaseDriver):
         for idx in range(min(count, 30)):
             item = items.nth(idx)
             name_text = await self._read_kimi_model_item_name(item)
-            if self._normalize_text(name_text) != target_norm:
+            if not self._model_name_matches(self._normalize_text(name_text), target_norm):
                 continue
 
             try:
@@ -2724,7 +2740,7 @@ class MoonshotDriver(BaseDriver):
             deadline = time.time() + 5.0
             while time.time() < deadline:
                 current = await self._read_current_model_name()
-                if self._normalize_text(current) == target_norm:
+                if self._model_name_matches(self._normalize_text(current), target_norm):
                     return True
                 await asyncio.sleep(0.1)
 
@@ -2742,7 +2758,37 @@ class MoonshotDriver(BaseDriver):
             pass
         return False
 
+    @classmethod
+    def _model_name_matches(cls, item_norm: str, target_norm: str) -> bool:
+        """Match a picker item name against a target model with alias support."""
+        aliases = cls.MODEL_MATCH_ALIASES.get(target_norm)
+        if aliases is None:
+            return item_norm == target_norm
+        return any(
+            item_norm == alias or item_norm.endswith(f" {alias}")
+            for alias in aliases
+        )
+
+    def _get_configured_model_friendly(self) -> str:
+        try:
+            value = self.config_manager.get_setting("moonshot_behavior", "model")
+        except Exception:
+            value = None
+        return str(value or "").strip()
+
     async def set_deepthink_state(self, state: bool):
+        configured_model = self._get_configured_model_friendly()
+        if configured_model:
+            # Explicit model selection wins over the Thinking toggle.
+            current = await self._read_current_model_name()
+            if self._normalize_text(current) != self._normalize_text(configured_model):
+                switched = await self._select_kimi_model(configured_model)
+                if not switched:
+                    Logger.warning(
+                        f"Moonshot: failed to select configured model '{configured_model}'."
+                    )
+            return
+
         current = await self._read_current_model_name()
         current_norm = self._normalize_text(current)
         instant_norm = self._normalize_text(self.MODEL_INSTANT)
