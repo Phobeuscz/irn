@@ -51,7 +51,7 @@ Requirements: Python 3.12+ (3.13 recommended)
 
 ```bash
 git clone https://github.com/Phobeuscz/irn.git   # Or download and extract in zip
-cd intense-rp-next
+cd irn
 
 python -m venv venv
 
