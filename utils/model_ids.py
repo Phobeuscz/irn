@@ -24,6 +24,7 @@ REAL_MODEL_ID_PROVIDERS: set[DriverProvider] = {
     DriverProvider.HUGGINGCHAT,
     DriverProvider.AI_STUDIO,
     DriverProvider.MIMO,
+    DriverProvider.MOONSHOT,
 }
 
 UMM_MODEL_IDS: tuple[str, ...] = (

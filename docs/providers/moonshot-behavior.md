@@ -82,6 +82,22 @@ Selects a specific entry in Kimi's model picker:
 
 An explicit model always wins over the Enable Thinking toggle: when one is selected, IntenseRP makes sure that exact picker entry is active and leaves the Thinking toggle alone. Matching is label-tolerant, so older rollouts that still show `K2.6 Instant` / `K2.6 Thinking` keep working.
 
+#### Split API model IDs
+
+With Universal Model Names enabled (Providers in Parallel), Moonshot exposes per-model API IDs like GLM does:
+
+| API model ID | Picker target | Reasoning |
+|--------------|---------------|-----------|
+| `instant-auto` / `instant-chat` / `instant-reasoner` | Instant | `-reasoner` switches to the Thinking variant |
+| `kimi-k3-auto` / `kimi-k3-chat` / `kimi-k3-reasoner` | Kimi K3 | `-reasoner` forwards reasoning, `-chat` strips it |
+| `kimi-k3-swarm-auto` / `kimi-k3-swarm-chat` / `kimi-k3-swarm-reasoner` | Kimi K3 Swarm | same as K3 |
+| `moonshot-auto` / `moonshot-chat` / `moonshot-reasoner` | legacy behavior modes | unchanged |
+
+The suffix always decides how reasoning content is handled; the name decides which picker entry is active.
+
+!!! note "Rate limits"
+    Kimi rate limits aggressively under load (especially K3). When the server answers with its "Too many people are chatting with Kimi" message or an HTTP 429, IntenseRP reports an at-capacity error to your client instead of returning silence - retry shortly, switch models, or subscribe to Kimi for the priority queue.
+
 ### Enable Thinking
 
 Switches Kimi to its Thinking model before sending a request.

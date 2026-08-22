@@ -3807,11 +3807,27 @@ class GLMDriver(BaseDriver):
                 captcha_recent = (time.time() - getattr(self, "_last_captcha_notice_ts", 0.0)) < 90.0
                 if not msg:
                     if self._glm_frontend_would_see_sse_data_event(full_response_body):
-                        # Surface a helpful error instead of silently returning an empty stream.
-                        msg = (
-                            "GLM Chat: intercepted completion produced no streamable output. "
-                            "This may indicate a GLM API / frontend change."
-                        )
+                        # SSE frames arrived but nothing was streamable. If the
+                        # frames carry no content fields at all, this matches
+                        # GLM's silent-refusal signature exactly (a lone
+                        # phase:"done" frame) - surface moderation, not an API
+                        # change warning.
+                        if (
+                            "delta_content" not in body_text
+                            and "edit_content" not in body_text
+                            and "content" not in body_text
+                        ):
+                            msg = (
+                                "GLM Chat silently refused this prompt - the server "
+                                "returned no content (shadow censorship). Try "
+                                "rephrasing the prompt or trimming the conversation "
+                                "history."
+                            )
+                        else:
+                            msg = (
+                                "GLM Chat: intercepted completion produced no streamable output. "
+                                "This may indicate a GLM API / frontend change."
+                            )
                     else:
                         msg = self._build_empty_completion_stream_error_message()
                         if captcha_recent:

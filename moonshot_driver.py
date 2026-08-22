@@ -28,7 +28,12 @@ from drivers.shared_utils import (
 )
 from utils.cache_manager import CacheManager
 from utils.logger import Logger
-from utils.model_ids import MODE_CHAT, MODE_REASONER, resolve_behavior_mode
+from utils.model_ids import (
+    MODE_CHAT,
+    MODE_REASONER,
+    resolve_behavior_mode,
+    resolve_real_model_label_from_model_id,
+)
 
 load_dotenv()
 
@@ -69,6 +74,56 @@ class MoonshotDriver(BaseDriver):
         "x-traffic-id",
     }
     CONNECT_MAX_FRAME_BYTES = 8 * 1024 * 1024
+    RATE_LIMIT_TEXT_MARKERS = (
+        "too many people are chatting with kimi",
+        "dedicated priority queue",
+        "rate limit",
+        "rate_limit",
+        "ratelimit",
+        "too many requests",
+    )
+
+    @classmethod
+    def _build_capacity_error_message(cls) -> str:
+        return (
+            "Kimi is currently at capacity (too many concurrent chats). "
+            "Retry shortly, switch models, or subscribe to Kimi for the priority queue."
+        )
+
+    @classmethod
+    def _extract_rate_limit_error_from_text(cls, text: Any) -> str | None:
+        normalized = re.sub(r"\s+", " ", str(text or "")).strip().lower()
+        if not normalized:
+            return None
+        # The exact Kimi popup phrase first - distinctive enough to scan raw
+        # response bytes safely - then generic markers for structured fields.
+        if "too many people are chatting with kimi" in normalized:
+            return cls._build_capacity_error_message()
+        if any(marker in normalized for marker in cls.RATE_LIMIT_TEXT_MARKERS):
+            return cls._build_capacity_error_message()
+        return None
+
+    def _scan_chunk_for_rate_limit(self, data: bytes, error_sink) -> bool:
+        """Scan raw response bytes for rate-limit signals.
+
+        Rate-limit responses may arrive outside the connect protocol (plain
+        JSON errors, HTML fragments), so notification parsing alone is not
+        enough. The primary marker phrase is specific to Kimi's throttle popup.
+        """
+        if error_sink is None:
+            return False
+        try:
+            text = bytes(data).decode("utf-8", errors="ignore")
+        except Exception:
+            return False
+        if "too many people are chatting with kimi" not in text.lower():
+            return False
+        message_text = self._extract_rate_limit_error_from_text(text)
+        if message_text:
+            error_sink(message_text)
+            return True
+        return False
+
     MODEL_INSTANT = "Instant"
     MODEL_THINKING = "K2.6 Thinking"
     MODEL_K3 = "Kimi K3"
@@ -123,8 +178,10 @@ class MoonshotDriver(BaseDriver):
         self.cache_manager = CacheManager()
 
         self.current_model = None
+        self.current_ui_model = ""
         self.current_send_deepthink = None
         self.thinking_active = False
+        self._search_ui_unavailable_warned = False
 
         self.clean_regen_message_cache_key = "moonshot_last_message.txt"
         self.clean_regen_state_cache_key = "moonshot_last_message_state.json"
@@ -509,7 +566,7 @@ class MoonshotDriver(BaseDriver):
             for idx in range(min(count, 10)):
                 item = locator.nth(idx)
                 try:
-                    text = (await item.inner_text() or "").strip()
+                    text = (await item.inner_text(timeout=1500) or "").strip()
                 except Exception:
                     continue
                 if not text:
@@ -966,19 +1023,19 @@ class MoonshotDriver(BaseDriver):
         except Exception:
             return False
 
-    async def _read_locator_text(self, locator) -> str:
+    async def _read_locator_text(self, locator, timeout_ms: int = 1500) -> str:
         try:
-            return str(await locator.inner_text() or "").strip()
+            return str(await locator.inner_text(timeout=timeout_ms) or "").strip()
         except Exception:
             pass
 
         try:
-            return str(await locator.text_content() or "").strip()
+            return str(await locator.text_content(timeout=timeout_ms) or "").strip()
         except Exception:
             pass
 
         try:
-            return str(await locator.get_attribute("aria-label") or "").strip()
+            return str(await locator.get_attribute("aria-label", timeout=timeout_ms) or "").strip()
         except Exception:
             return ""
 
@@ -1374,21 +1431,58 @@ class MoonshotDriver(BaseDriver):
         Logger.success("Moonshot: login detected.")
         self._mark_active_ece_pair_used()
 
-    def _resolve_deepthink_flags(self, model: str) -> tuple[bool, bool]:
+    def api_real_model_labels(self) -> list[str]:
+        return [self.MODEL_INSTANT, self.MODEL_K3, self.MODEL_K3_SWARM]
+
+    def _get_moonshot_model_label_for_request(self, model: Any = None) -> str:
+        """Resolve a picker label from an API model ID (e.g. kimi-k3-reasoner)."""
+        override = resolve_real_model_label_from_model_id(
+            self.provider,
+            model,
+            self.api_real_model_labels(),
+        )
+        if override:
+            return override
+        return ""
+
+    def _resolve_deepthink_flags(self, model: str, ui_model_label: str = "") -> tuple[bool, bool]:
         enable_deepthink = bool(self.config_manager.get_setting("moonshot_behavior", "enable_deepthink"))
         send_deepthink = bool(self.config_manager.get_setting("moonshot_behavior", "send_deepthink"))
 
-        mode = resolve_behavior_mode(model, self.provider)
+        mode = resolve_behavior_mode(
+            model,
+            self.provider,
+            real_model_labels=self.api_real_model_labels(),
+        )
         if mode == MODE_CHAT:
             return False, False
         if mode == MODE_REASONER:
+            # The Thinking toggle only applies to models with Instant/Thinking
+            # variants; explicit K3-family labels simply forward reasoning.
+            if ui_model_label and not self._label_has_thinking_variant(ui_model_label):
+                return False, send_deepthink
             return True, send_deepthink
 
         return enable_deepthink, send_deepthink
 
+    @classmethod
+    def _label_has_thinking_variant(cls, label: str) -> bool:
+        norm = cls._normalize_text(label)
+        return (
+            norm in {
+                cls._normalize_text(cls.MODEL_INSTANT),
+                cls._normalize_text(cls.MODEL_THINKING),
+            }
+            or "instant" in norm
+            or "thinking" in norm
+        )
+
     def _resolve_moonshot_request_settings(self, model: str, overrides: Optional[Dict[str, bool]] = None) -> Dict[str, bool]:
         _ = (model or "").strip() or "moonshot-auto"
-        deepthink_enabled, send_deepthink = self._resolve_deepthink_flags(model)
+        ui_model_label = self._get_moonshot_model_label_for_request(model)
+        if not ui_model_label:
+            ui_model_label = self._get_configured_model_friendly()
+        deepthink_enabled, send_deepthink = self._resolve_deepthink_flags(model, ui_model_label)
         search_enabled = bool(self.config_manager.get_setting("moonshot_behavior", "enable_search"))
         send_as_text_file = bool(self.config_manager.get_setting("moonshot_behavior", "send_as_text_file"))
 
@@ -1397,6 +1491,7 @@ class MoonshotDriver(BaseDriver):
             "send_deepthink": bool(send_deepthink),
             "search_enabled": bool(search_enabled),
             "send_as_text_file": bool(send_as_text_file),
+            "ui_model": str(ui_model_label or "").strip(),
         }
 
         if overrides:
@@ -1780,6 +1875,15 @@ class MoonshotDriver(BaseDriver):
         self.current_abort_event = abort_event
         self._degrade_notice_logged = False
         provider_activity_count = 0
+        stream_error_reported = False
+
+        def report_stream_error(message_text: str) -> None:
+            nonlocal stream_error_reported
+            if stream_error_reported:
+                return
+            stream_error_reported = True
+            Logger.warning(message_text)
+            response_queue.put_nowait(f"data: {json.dumps({'error': message_text})}\n\n")
 
         def get_provider_activity_count() -> int:
             return provider_activity_count
@@ -1815,6 +1919,7 @@ class MoonshotDriver(BaseDriver):
         effective_send_deepthink = effective_settings["send_deepthink"]
         enable_search = effective_settings["search_enabled"]
         send_as_text_file = effective_settings["send_as_text_file"]
+        self.current_ui_model = str(effective_settings.get("ui_model") or "").strip()
         self.current_send_deepthink = effective_send_deepthink
 
         async def handle_route(route):
@@ -1892,6 +1997,8 @@ class MoonshotDriver(BaseDriver):
                             break
 
                         full_response_body.extend(chunk)
+                        if not stream_error_reported:
+                            self._scan_chunk_for_rate_limit(chunk, report_stream_error)
                         await self._process_connect_chunk(
                             chunk,
                             response_queue,
@@ -1899,7 +2006,11 @@ class MoonshotDriver(BaseDriver):
                                 self.config_manager.get_setting("moonshot_behavior", "anti_censorship")
                             ),
                             send_deepthink=bool(effective_send_deepthink),
+                            error_sink=report_stream_error,
                         )
+                        if stream_error_reported:
+                            Logger.debug("Moonshot: stopping replay stream after rate-limit report.")
+                            break
             except httpx.ReadError as e:
                 if (
                     not aborted
@@ -1987,6 +2098,9 @@ class MoonshotDriver(BaseDriver):
             nonlocal provider_activity_count, cdp_had_data
             if request_id != cdp_active_request_id or not data or cdp_stream_finished:
                 return
+            if stream_error_reported:
+                await finish_cdp_stream(request_id, encountered_error=True)
+                return
 
             cdp_had_data = True
             provider_activity_count += 1
@@ -1994,6 +2108,7 @@ class MoonshotDriver(BaseDriver):
                 await finish_cdp_stream(request_id, aborted=True)
                 return
 
+            self._scan_chunk_for_rate_limit(data, report_stream_error)
             await self._process_connect_chunk(
                 data,
                 response_queue,
@@ -2001,7 +2116,11 @@ class MoonshotDriver(BaseDriver):
                     self.config_manager.get_setting("moonshot_behavior", "anti_censorship")
                 ),
                 send_deepthink=bool(effective_send_deepthink),
+                error_sink=report_stream_error,
             )
+            if stream_error_reported:
+                await finish_cdp_stream(request_id, encountered_error=True)
+                return
             if request_aborted():
                 await finish_cdp_stream(request_id, aborted=True)
 
@@ -2091,6 +2210,15 @@ class MoonshotDriver(BaseDriver):
             method = request_methods.get(request_id, "").upper()
             if method and method != "POST":
                 return
+            if request_id == cdp_active_request_id:
+                try:
+                    status = int(response.get("status") or 0)
+                except Exception:
+                    status = 0
+                if status in (429, 503):
+                    report_stream_error(self._build_capacity_error_message())
+                    await finish_cdp_stream(request_id, encountered_error=True)
+                    return
             cdp_pending_response_urls[request_id] = url
             if request_id != cdp_active_request_id:
                 return
@@ -2396,6 +2524,7 @@ class MoonshotDriver(BaseDriver):
             self.current_abort_event = None
             self.abort_requested = False
             self.current_model = None
+            self.current_ui_model = ""
             self.current_send_deepthink = None
             self.thinking_active = False
             self._connect_buffer = bytearray()
@@ -2552,6 +2681,7 @@ class MoonshotDriver(BaseDriver):
         *,
         anti_censorship: bool,
         send_deepthink: bool,
+        error_sink: Optional[Callable[[str], None]] = None,
     ) -> None:
         for payload in self._iter_connect_payloads(chunk):
             data = self._decode_connect_payload(payload)
@@ -2565,6 +2695,13 @@ class MoonshotDriver(BaseDriver):
             if isinstance(notification, dict):
                 note_type = str(notification.get("type") or "")
                 note_msg = str(notification.get("message") or "")
+
+                rate_limit_message = (
+                    self._extract_rate_limit_error_from_text(note_msg)
+                    or self._extract_rate_limit_error_from_text(note_type)
+                )
+                if rate_limit_message and error_sink is not None:
+                    error_sink(rate_limit_message)
 
                 if note_type == "TYPE_MODEL_DEGRADE" and note_msg and (not self._degrade_notice_logged):
                     self._degrade_notice_logged = True
@@ -2656,7 +2793,7 @@ class MoonshotDriver(BaseDriver):
                 locator = self.page.locator(selector)
                 if await locator.count() == 0:
                     continue
-                text = (await locator.first.inner_text() or "").strip()
+                text = (await locator.first.inner_text(timeout=1500) or "").strip()
                 if text:
                     return text
             except Exception:
@@ -2678,14 +2815,14 @@ class MoonshotDriver(BaseDriver):
                 locator = item.locator(selector)
                 if await locator.count() == 0:
                     continue
-                text = (await locator.first.inner_text() or "").strip()
+                text = (await locator.first.inner_text(timeout=1500) or "").strip()
                 if text:
                     return text
             except Exception:
                 continue
 
         try:
-            raw = (await item.inner_text() or "").strip()
+            raw = (await item.inner_text(timeout=1500) or "").strip()
         except Exception:
             raw = ""
         if not raw:
@@ -2798,7 +2935,9 @@ class MoonshotDriver(BaseDriver):
         return value
 
     async def set_deepthink_state(self, state: bool):
-        configured_model = self._get_configured_model_friendly()
+        # Priority: API-requested model (kimi-k3-*) > configured dropdown >
+        # legacy Auto mode (Thinking toggle flips Instant/Thinking).
+        configured_model = self.current_ui_model or self._get_configured_model_friendly()
         if configured_model:
             # Explicit model selection wins over the Thinking toggle.
             current = await self._read_current_model_name()
@@ -2834,7 +2973,56 @@ class MoonshotDriver(BaseDriver):
                 f"Moonshot: failed to set Thinking mode target model '{target_model}'."
             )
 
+    async def _find_offline_mode_switch(self):
+        """Locate kimi.ai's Offline Mode switch (label "Internet off").
+
+        The new composer replaced the old Search toolkit menu with a single
+        ToolSwitch: active means internet is off (search disabled). Returns
+        (locator, is_offline_active) or (None, None) when the control is not
+        rendered for the current account/model/region.
+        """
+        if not self.page:
+            return None, None
+
+        # Hard deadline - this scan runs on every request and must never stall.
+        deadline = time.time() + 5.0
+        selectors = [
+            "div.chat-editor .tool-switch",
+            ".tool-switch",
+        ]
+        for selector in selectors:
+            try:
+                locator = self.page.locator(selector)
+                count = await locator.count()
+            except Exception:
+                continue
+
+            for idx in range(min(count, 20)):
+                if time.time() > deadline:
+                    return None, None
+                item = locator.nth(idx)
+                try:
+                    if not await item.is_visible():
+                        continue
+                    text = self._normalize_text(
+                        await self._read_locator_text(item, timeout_ms=750)
+                    )
+                except Exception:
+                    continue
+                if not text:
+                    continue
+                if "internet off" in text or "offline" in text:
+                    return item, True
+                if "auto online" in text or "internet on" in text or "online" in text:
+                    return item, False
+        return None, None
+
     async def _is_search_enabled(self) -> bool:
+        switch, offline_active = await self._find_offline_mode_switch()
+        if switch is not None:
+            return not offline_active
+
+        # Legacy kimi.com indicator.
         indicator = self.page.locator(
             "div.chat-editor div.tool-switch.open.showClose",
             has_text="Internet off",
@@ -3003,6 +3191,19 @@ class MoonshotDriver(BaseDriver):
 
         return None
 
+    def _notice_search_ui_unavailable(self, action: str) -> None:
+        """Warn once per session when Kimi's search controls can't be found."""
+        if getattr(self, "_search_ui_unavailable_warned", False):
+            Logger.debug(
+                f"Moonshot: search UI unavailable, skipped {action} (already reported)."
+            )
+            return
+        self._search_ui_unavailable_warned = True
+        Logger.warning(
+            f"Moonshot: could not {action} Search - the control was not found on "
+            "this Kimi rollout. Continuing with Kimi's current search state."
+        )
+
     async def _set_search_state_via_toolkit(self, state: bool) -> bool:
         if not await self._open_kimi_toolkit_menu(timeout_ms=8000):
             return False
@@ -3034,11 +3235,41 @@ class MoonshotDriver(BaseDriver):
             Logger.warning(f"Moonshot: failed to click search state option: {e}")
             return False
 
+    @classmethod
+    def _model_has_search_control(cls, ui_model_label: str) -> bool:
+        """K3-family models don't render the search control in Kimi's composer."""
+        norm = cls._normalize_text(ui_model_label)
+        return not ("k3" in norm or "swarm" in norm)
+
     async def set_search_state(self, state: bool):
+        active_label = self.current_ui_model or self._get_configured_model_friendly()
+        if not self._model_has_search_control(active_label):
+            Logger.debug(
+                f"Moonshot: skipping Search toggle for '{active_label}' "
+                "(no search control on this model)."
+            )
+            return
         await self._dismiss_kimi_sidebar_overlay()
         current = await self._is_search_enabled()
         if current == state:
             return
+
+        # Preferred path on kimi.ai: toggle the Offline Mode switch directly.
+        switch, _offline_active = await self._find_offline_mode_switch()
+        if switch is not None:
+            try:
+                clicked = await self._click_with_fallbacks(switch, timeout_ms=3000)
+                if not clicked:
+                    raise RuntimeError("offline mode switch was not clickable")
+                await asyncio.sleep(0.4)
+                after = await self._is_search_enabled()
+                if after == state:
+                    return
+                Logger.warning(
+                    f"Moonshot: Offline Mode toggle did not settle to search={'on' if state else 'off'}."
+                )
+            except Exception as e:
+                Logger.warning(f"Moonshot: failed to toggle the Offline Mode switch: {e}")
 
         if state:
             quick_enable = self.page.locator(
@@ -3054,9 +3285,17 @@ class MoonshotDriver(BaseDriver):
                 except Exception:
                     pass
 
+            ok = await self._set_search_state_via_toolkit(state)
+            if ok:
+                await asyncio.sleep(0.4)
+                if await self._is_search_enabled():
+                    return
+            self._notice_search_ui_unavailable("enable")
+            return
+
         ok = await self._set_search_state_via_toolkit(state)
         if not ok:
-            Logger.warning(f"Moonshot: could not set Search to {state}.")
+            self._notice_search_ui_unavailable("disable")
             return
 
         await asyncio.sleep(0.4)

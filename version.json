@@ -1,8 +1,8 @@
 {
-  "version": "2.9.1-patch",
+  "version": "2.9.2",
   "aua": true,
   "severity": 3,
   "pu": "discord",
   "pufref": "none",
-  "summary": "GLM Chat fixes: new completion endpoint, GLM-5.3 support, refusal/captcha transparency, CDP Teeing hardening"
+  "summary": "Kimi split model IDs (kimi-k3-*), capacity detection for GLM and Kimi, shadow-censorship aware errors"
 }
