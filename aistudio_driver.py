@@ -171,6 +171,9 @@ class AIStudioDriver(BaseDriver):
     TEMPORARY_CHAT_BADGE_TIMEOUT_MS = 10000
     DEFAULT_MODEL_LABEL = "Gemini 3.1 Pro"
     DEFAULT_MAX_OUTPUT_TOKENS = 65536
+    PAID_MODEL_ERROR = (
+        "This model requires paid access in Google AI Studio, and IRP can't serve it."
+    )
     GEMINI_25_PAID_MODEL_ERROR = (
         "Gemini 2.5 models have become paid in Google AI Studio, and IRP can't serve them."
     )
@@ -315,6 +318,14 @@ class AIStudioDriver(BaseDriver):
         flags=re.IGNORECASE,
     )
     LOWEST_LEVEL_BY_MODEL: Dict[str, str] = {
+        "gemini-4-argon": "Low",
+        "gemini-4-argon-preview": "Low",
+        "gemini-3.8-flash": "Low",
+        "gemini-3.8-flash-preview": "Low",
+        "gemini-3.7-flash": "Low",
+        "gemini-3.7-flash-preview": "Low",
+        "gemini-3.6-flash": "Low",
+        "gemini-3.6-flash-preview": "Low",
         "gemini-3.5-flash": "Minimal",
         "gemini-3.1-pro-preview": "Low",
         "gemini-3.1-flash-lite": "Minimal",
@@ -326,6 +337,14 @@ class AIStudioDriver(BaseDriver):
         "gemma-4-31b-it": "Minimal",
     }
     THINKING_LEVELS_BY_MODEL: Dict[str, tuple[str, ...]] = {
+        "gemini-4-argon": ("Low", "Medium", "High"),
+        "gemini-4-argon-preview": ("Low", "Medium", "High"),
+        "gemini-3.8-flash": ("Low", "Medium", "High"),
+        "gemini-3.8-flash-preview": ("Low", "Medium", "High"),
+        "gemini-3.7-flash": ("Low", "Medium", "High"),
+        "gemini-3.7-flash-preview": ("Low", "Medium", "High"),
+        "gemini-3.6-flash": ("Low", "Medium", "High"),
+        "gemini-3.6-flash-preview": ("Low", "Medium", "High"),
         "gemini-3.5-flash": ("Minimal", "Low", "Medium", "High"),
         "gemini-3.1-pro-preview": ("Low", "Medium", "High"),
         "gemini-3.1-flash-lite": ("Minimal", "Low", "Medium", "High"),
@@ -364,6 +383,28 @@ class AIStudioDriver(BaseDriver):
         "gemini-2.5-flash-lite": (512, 24576),
     }
     MODEL_CONFIGS: Dict[str, Dict[str, Any]] = {
+        "Gemini 4 Argon": {
+            "base_id": "gemini-4-argon",
+            "selector_id": "model-carousel-row-models/gemini-4-argon",
+        },
+        "Gemini 3.8 Flash": {
+            "base_id": "gemini-3.8-flash",
+            "selector_id": "model-carousel-row-models/gemini-3.8-flash",
+            "supports_temperature": False,
+            "supports_top_p": False,
+        },
+        "Gemini 3.7 Flash": {
+            "base_id": "gemini-3.7-flash",
+            "selector_id": "model-carousel-row-models/gemini-3.7-flash",
+            "supports_temperature": False,
+            "supports_top_p": False,
+        },
+        "Gemini 3.6 Flash": {
+            "base_id": "gemini-3.6-flash",
+            "selector_id": "model-carousel-row-models/gemini-3.6-flash",
+            "supports_temperature": False,
+            "supports_top_p": False,
+        },
         "Gemini 3.5 Flash": {
             "base_id": "gemini-3.5-flash",
             "selector_id": "model-carousel-row-models/gemini-3.5-flash",
@@ -1427,6 +1468,19 @@ class AIStudioDriver(BaseDriver):
             model,
             self.api_real_model_labels(),
         )
+        if not override and model:
+            raw = str(model).strip()
+            if raw in self.MODEL_CONFIGS:
+                override = raw
+            else:
+                canon = self._canonicalize_text(raw)
+                for label, cfg in self.MODEL_CONFIGS.items():
+                    if canon in (
+                        self._canonicalize_text(label),
+                        self._canonicalize_text(cfg.get("base_id") or ""),
+                    ):
+                        override = label
+                        break
         override_label = str(model_label_override or override or "").strip()
         return override_label if override_label in self.MODEL_CONFIGS else configured_label
 
@@ -1434,10 +1488,14 @@ class AIStudioDriver(BaseDriver):
     def _model_config_for_label(cls, label: str) -> Dict[str, Any]:
         return dict(cls.MODEL_CONFIGS.get(label) or cls.MODEL_CONFIGS[cls.DEFAULT_MODEL_LABEL])
 
-    @staticmethod
-    def _is_paid_gemini_25_model_config(model_config: Dict[str, Any]) -> bool:
+    @classmethod
+    def _is_paid_model_config(cls, model_config: Dict[str, Any]) -> bool:
+        if bool(model_config.get("is_paid")):
+            return True
         model_base_id = str(model_config.get("base_id") or "").strip().lower()
         return model_base_id.startswith("gemini-2.5-")
+
+    _is_paid_gemini_25_model_config = _is_paid_model_config
 
     @staticmethod
     def _normalize_account_email(email: Any) -> str:
@@ -1482,7 +1540,7 @@ class AIStudioDriver(BaseDriver):
             pair = None
         return self._normalize_account_email(getattr(pair, "email", None) if pair else None)
 
-    def _paid_gemini_25_access_allowed_for_current_account(self) -> bool:
+    def _paid_model_access_allowed_for_current_account(self) -> bool:
         if not self._assume_paid_model_access_enabled():
             return False
 
@@ -1493,7 +1551,10 @@ class AIStudioDriver(BaseDriver):
         active_email = self._active_account_email()
         return bool(active_email and active_email in allowed_emails)
 
-    def _paid_gemini_25_model_error(self) -> str:
+    _paid_gemini_25_access_allowed_for_current_account = _paid_model_access_allowed_for_current_account
+
+    def _paid_model_error(self, model_label: str = "") -> str:
+        name = model_label or "Gemini 2.5"
         if not self._assume_paid_model_access_enabled():
             return (
                 f"{self.GEMINI_25_PAID_MODEL_ERROR} Enable Assume Paid Model Access only "
@@ -1505,27 +1566,30 @@ class AIStudioDriver(BaseDriver):
             active_email = self._active_account_email()
             account_label = f"`{active_email}`" if active_email else "the current manual account"
             return (
-                "Gemini 2.5 models require paid access in Google AI Studio. "
+                f"{name} models require paid access in Google AI Studio. "
                 "Assume Paid Model Access is enabled, but "
                 f"{account_label} is not listed in Paid Model Access Emails."
             )
 
         return self.GEMINI_25_PAID_MODEL_ERROR
 
+    _paid_gemini_25_model_error = _paid_model_error
+
     def _raise_if_model_unavailable(self, model_config: Dict[str, Any]) -> None:
         if (
-            self._is_paid_gemini_25_model_config(model_config)
-            and not self._paid_gemini_25_access_allowed_for_current_account()
+            self._is_paid_model_config(model_config)
+            and not self._paid_model_access_allowed_for_current_account()
         ):
-            raise RuntimeError(self._paid_gemini_25_model_error())
+            base_id = str(model_config.get("base_id") or "")
+            raise RuntimeError(self._paid_model_error(base_id or "Selected model"))
 
     def can_handle_request_model(self, model: Any = None) -> bool:
         """Return whether this account-backed driver can handle the requested model."""
         desired_label = self._resolve_model_label_for_request(model)
         model_config = self._model_config_for_label(desired_label)
-        if not self._is_paid_gemini_25_model_config(model_config):
+        if not self._is_paid_model_config(model_config):
             return True
-        return self._paid_gemini_25_access_allowed_for_current_account()
+        return self._paid_model_access_allowed_for_current_account()
 
     def validate_request_model_available(self, model: Any = None) -> None:
         desired_label = self._resolve_model_label_for_request(model)
@@ -1576,12 +1640,25 @@ class AIStudioDriver(BaseDriver):
         if not current:
             return False
 
+        base_id = str(model_config.get("base_id") or "").strip()
+        selector_tail = str(model_config.get("selector_id") or "").rsplit("/", 1)[-1]
         candidates = [
             desired_label,
-            str(model_config.get("base_id") or ""),
-            str(model_config.get("selector_id") or "").rsplit("/", 1)[-1],
+            base_id,
+            selector_tail,
         ]
-        return any(current == cls._canonicalize_text(candidate) for candidate in candidates if candidate)
+        if base_id:
+            candidates.extend([f"{base_id}-preview", f"{base_id}preview"])
+        if desired_label:
+            candidates.extend([f"{desired_label} Preview", f"{desired_label}Preview"])
+
+        for candidate in candidates:
+            if not candidate:
+                continue
+            cand_canon = cls._canonicalize_text(candidate)
+            if current == cand_canon or cand_canon in current or current in cand_canon:
+                return True
+        return False
 
     async def _read_current_model_id(self) -> str:
         """Read the currently selected model label from the model selector card."""
@@ -1682,34 +1759,62 @@ class AIStudioDriver(BaseDriver):
             await asyncio.sleep(0.2)
         return bool(clicked)
 
-    async def _click_model_option(self, selector_id: str) -> bool:
-        """Click a visible model option by its picker button id."""
+    async def _click_model_option(
+        self,
+        selector_id: str,
+        base_id: str = "",
+        label: str = "",
+    ) -> bool:
+        """Click a visible model option by its picker button id or text."""
         if not self.page:
             return False
 
-        target = self.page.locator(f"div.model-options-container button[id='{selector_id}']")
-        if await target.count() == 0:
-            target = self.page.locator(f"button[id='{selector_id}']")
+        targets = [
+            f"div.model-options-container button[id='{selector_id}']",
+            f"button[id='{selector_id}']",
+        ]
+        if base_id:
+            targets.extend([
+                f"div.model-options-container button[id*='{base_id}']",
+                f"button[id*='{base_id}']",
+            ])
 
-        count = 0
-        try:
-            count = await target.count()
-        except Exception:
+        for sel in targets:
+            target = self.page.locator(sel)
             count = 0
-
-        for idx in range(min(count, 8)):
-            candidate = target.nth(idx)
             try:
-                if not await candidate.is_visible():
+                count = await target.count()
+            except Exception:
+                count = 0
+
+            for idx in range(min(count, 8)):
+                candidate = target.nth(idx)
+                try:
+                    if not await candidate.is_visible():
+                        continue
+                except Exception:
+                    pass
+
+                try:
+                    await self._click_locator(candidate, timeout=3000)
+                    return True
+                except Exception:
                     continue
+
+        if label:
+            canon_label = self._canonicalize_text(label)
+            try:
+                container = self.page.locator("div.model-options-container button")
+                btn_count = await container.count()
+                for idx in range(min(btn_count, 30)):
+                    btn = container.nth(idx)
+                    if await btn.is_visible():
+                        txt = self._canonicalize_text(await btn.inner_text())
+                        if canon_label in txt or txt in canon_label:
+                            await self._click_locator(btn, timeout=3000)
+                            return True
             except Exception:
                 pass
-
-            try:
-                await self._click_locator(candidate, timeout=3000)
-                return True
-            except Exception:
-                continue
 
         return False
 
@@ -1729,7 +1834,7 @@ class AIStudioDriver(BaseDriver):
             return
 
         await self._click_model_family_filter()
-        if not await self._click_model_option(desired_selector):
+        if not await self._click_model_option(desired_selector, desired_base, desired_label):
             Logger.warning(
                 f"Google AI Studio: target model '{desired_label}' was not found in the picker."
             )
@@ -3082,13 +3187,61 @@ class AIStudioDriver(BaseDriver):
         if ok:
             self._safety_filters_initialized = True
 
+    async def _read_current_thinking_level(self) -> str:
+        """Read the currently displayed thinking level text from the trigger, if visible."""
+        if not self.page:
+            return ""
+        selectors = [
+            "mat-select[aria-label*='hinking'] .mat-mdc-select-value-text",
+            "mat-select[aria-label*='hinking'] .mat-mdc-select-min-line",
+            "mat-select[aria-label*='hinking'] span",
+            ".mat-mdc-form-field:has-text('Thinking') .mat-mdc-select-value-text",
+            ".mat-mdc-form-field:has-text('Thinking') .mat-mdc-select-min-line",
+            "mat-form-field:has-text('Thinking') .mat-mdc-select-value-text",
+            "mat-form-field:has-text('Thinking') [role='combobox']",
+        ]
+        for sel in selectors:
+            try:
+                loc = self.page.locator(sel)
+                if await loc.count() > 0 and await loc.first.is_visible():
+                    txt = str(await loc.first.inner_text() or "").strip()
+                    norm = self._normalize_thinking_level(txt)
+                    if norm:
+                        return norm
+            except Exception:
+                continue
+        return ""
+
     async def _open_thinking_level_dropdown(self) -> bool:
         """Find and open the thinking-level dropdown despite AI Studio layout variance."""
         if not self.page:
             return False
 
         await self._dismiss_transient_overlays()
-        fields = self.page.locator(self.THINKING_FORM_FIELD_SELECTOR)
+
+        # Try direct selectors first
+        direct_selectors = [
+            "mat-select[aria-label='Thinking Level']",
+            "mat-select[aria-label='Thinking Effort']",
+            "mat-select[aria-label*='hinking']",
+            "[data-test-id*='thinking'] mat-select",
+            "[data-test-id*='thinking'] [role='combobox']",
+        ]
+        for sel in direct_selectors:
+            try:
+                loc = self.page.locator(sel)
+                if await loc.count() > 0 and await loc.first.is_visible():
+                    await self._click_locator(loc.first, timeout=3000)
+                    await self._ui_settle_pause(0.18)
+                    try:
+                        await self.page.wait_for_selector(self.THINKING_LISTBOX_SELECTOR, timeout=5000, state="visible")
+                        return True
+                    except Exception:
+                        pass
+            except Exception:
+                continue
+
+        fields = self.page.locator(".mat-mdc-form-field, mat-form-field")
         count = 0
         try:
             count = await fields.count()
@@ -3096,7 +3249,7 @@ class AIStudioDriver(BaseDriver):
             count = 0
 
         visible_items = []
-        for idx in range(min(count, 8)):
+        for idx in range(min(count, 12)):
             item = fields.nth(idx)
             try:
                 if await item.is_visible():
@@ -3104,16 +3257,16 @@ class AIStudioDriver(BaseDriver):
             except Exception:
                 continue
 
-        if len(visible_items) < 2:
+        if not visible_items:
             return False
 
         target = None
         for item in visible_items:
             try:
                 for label in self.THINKING_SELECT_LABELS:
-                    thinking_select = item.locator(f"mat-select[aria-label='{label}']")
+                    thinking_select = item.locator(f"mat-select[aria-label='{label}'], mat-select[aria-label*='{label}']")
                     if await thinking_select.count() > 0:
-                        target = item
+                        target = thinking_select.first
                         break
                 if target is not None:
                     break
@@ -3162,9 +3315,9 @@ class AIStudioDriver(BaseDriver):
 
         try:
             await self.page.wait_for_selector(self.THINKING_LISTBOX_SELECTOR, timeout=5000, state="visible")
+            return True
         except Exception:
             return False
-        return True
 
     async def _select_thinking_level(self, level: str) -> bool:
         """Select a normalized thinking level from the thinking dropdown."""
@@ -3173,6 +3326,11 @@ class AIStudioDriver(BaseDriver):
             return False
         if not self.page:
             return False
+
+        # If already set to the desired level, skip opening the dropdown
+        current = await self._read_current_thinking_level()
+        if current and current == wanted:
+            return True
 
         if not await self._open_thinking_level_dropdown():
             return False
@@ -3184,28 +3342,51 @@ class AIStudioDriver(BaseDriver):
         except Exception:
             count = 0
 
-        for idx in range(min(count, 8)):
+        available: list[tuple[str, Any]] = []
+        for idx in range(min(count, 12)):
             candidate = options.nth(idx)
             try:
                 if not await candidate.is_visible():
                     continue
-            except Exception:
-                continue
-
-            try:
                 text = str(await candidate.inner_text() or "").strip()
+                norm = self._normalize_thinking_level(text)
+                if norm:
+                    available.append((norm, candidate))
             except Exception:
-                text = ""
-            if self._normalize_thinking_level(text) != wanted:
                 continue
 
+        if not available:
             try:
-                await self._click_locator(candidate, timeout=3000)
+                await self.page.keyboard.press("Escape")
+            except Exception:
+                pass
+            return False
+
+        # Try exact match first
+        target_cand = next((cand for norm, cand in available if norm == wanted), None)
+
+        # Fallback to closest available option if wanted is not present
+        if target_cand is None:
+            supported_available = tuple(norm for norm, _ in available)
+            closest_norm = self._closest_supported_thinking_level(wanted, supported_available)
+            target_cand = next((cand for norm, cand in available if norm == closest_norm), None)
+            if target_cand:
+                Logger.info(
+                    f"Google AI Studio: thinking level '{wanted}' not in dropdown {supported_available}; selecting closest '{closest_norm}'."
+                )
+
+        if target_cand is not None:
+            try:
+                await self._click_locator(target_cand, timeout=3000)
                 await self._ui_settle_pause(0.18)
                 return True
             except Exception:
-                continue
+                pass
 
+        try:
+            await self.page.keyboard.press("Escape")
+        except Exception:
+            pass
         return False
 
     async def _apply_thinking_budget_level(self, model_base: str, level: str) -> bool:
@@ -4758,6 +4939,103 @@ class AIStudioDriver(BaseDriver):
         """Return whether the latest assistant turn has visible generated text."""
         return bool(await self._latest_assistant_turn_visible_text())
 
+    async def _get_latest_assistant_turn_formatted_text(self) -> str:
+        """Extract rendered Markdown/plaintext from the latest assistant turn, preserving newlines."""
+        turn, _ = await self._find_latest_visible_assistant_turn()
+        if turn is None:
+            return ""
+
+        send_deepthink = bool(getattr(self, "current_send_deepthink", False))
+        try:
+            text = str(
+                await turn.evaluate(
+                    r"""(el, sendDeepthink) => {
+                        const clone = el.cloneNode(true);
+                        // Strip out buttons and internal badges
+                        const buttons = clone.querySelectorAll(
+                            'button, .button, [role="button"], .chat-turn-author-badge, .code-block-decoration, .mat-mdc-button'
+                        );
+                        buttons.forEach(n => n.remove());
+
+                        if (!sendDeepthink) {
+                            const thoughts = clone.querySelectorAll(
+                                'mat-expansion-panel, .thought-container, .thinking-container, [class*="thought"], [class*="thinking"]'
+                            );
+                            thoughts.forEach(n => n.remove());
+                        }
+                        return (clone.innerText || clone.textContent || '').trim();
+                    }""",
+                    send_deepthink,
+                ) or ""
+            )
+        except Exception:
+            return ""
+
+        if text.strip().lower() == "content blocked":
+            return ""
+        return text.strip()
+
+    async def _stream_response_from_dom(
+        self,
+        queue: asyncio.Queue,
+        *,
+        abort_event: asyncio.Event | None = None,
+        attempt_meta: Dict[str, Any] | None = None,
+        timeout_s: float = 180.0,
+    ) -> None:
+        """Stream generated response text directly from AI Studio's DOM as it updates."""
+        Logger.info("Google AI Studio: active DOM response streaming fallback engaged.")
+        deadline = time.time() + timeout_s
+        last_streamed_text = ""
+        saw_text = False
+        stop_seen = False
+        idle_counter = 0
+
+        try:
+            while time.time() < deadline:
+                if self.abort_requested or (abort_event and abort_event.is_set()):
+                    Logger.debug("Google AI Studio DOM stream: abort requested.")
+                    break
+
+                current_text = await self._get_latest_assistant_turn_formatted_text()
+                if current_text:
+                    if len(current_text) > len(last_streamed_text):
+                        if current_text.startswith(last_streamed_text):
+                            delta = current_text[len(last_streamed_text):]
+                        else:
+                            common_len = 0
+                            min_len = min(len(last_streamed_text), len(current_text))
+                            while common_len < min_len and last_streamed_text[common_len] == current_text[common_len]:
+                                common_len += 1
+                            delta = current_text[common_len:]
+
+                        last_streamed_text = current_text
+                        saw_text = True
+                        idle_counter = 0
+                        if attempt_meta is not None:
+                            attempt_meta["emitted_text"] = True
+                        if delta:
+                            await self._enqueue_openai_delta(queue, delta)
+
+                stop_button = await self._find_stop_generation_button(timeout_ms=0)
+                if stop_button is not None:
+                    stop_seen = True
+                    idle_counter = 0
+                else:
+                    if stop_seen or (saw_text and idle_counter >= 8):
+                        Logger.success("Google AI Studio: DOM response streaming finished.")
+                        break
+                    if saw_text:
+                        idle_counter += 1
+
+                await asyncio.sleep(0.15)
+        except Exception as e:
+            Logger.error(f"Google AI Studio: error during DOM stream scraping: {e}")
+        finally:
+            if saw_text:
+                await self._enqueue_openai_delta(queue, "", finish_reason="stop")
+            await queue.put(None)
+
     def _anti_censorship_edit_save_timeout_ms(self) -> int:
         value = self._clamp_int(
             self.config_manager.get_setting(
@@ -6010,10 +6288,18 @@ class AIStudioDriver(BaseDriver):
                     {"requestId": request_id},
                 )
             except Exception as exc:
-                message_text = f"Google AI Studio CDP response streaming failed: {exc}"
-                Logger.error(message_text)
-                await response_queue.put({"error": message_text})
-                await _finish_cdp_stream(request_id, encountered_error=True)
+                Logger.warning(
+                    f"Google AI Studio CDP response streaming failed ({exc}); "
+                    "falling back to DOM stream scraping..."
+                )
+                asyncio.create_task(
+                    self._stream_response_from_dom(
+                        response_queue,
+                        abort_event=abort_event,
+                        attempt_meta=current_attempt_meta,
+                    )
+                )
+                await _finish_cdp_stream(request_id)
                 return
 
             if isinstance(result, dict):
@@ -6116,6 +6402,21 @@ class AIStudioDriver(BaseDriver):
                 await _finish_cdp_stream(request_id)
                 return
 
+            if not cdp_had_data:
+                Logger.warning(
+                    f"Google AI Studio CDP stream failed before data was received ({error_text}); "
+                    "falling back to DOM stream scraping..."
+                )
+                asyncio.create_task(
+                    self._stream_response_from_dom(
+                        response_queue,
+                        abort_event=abort_event,
+                        attempt_meta=current_attempt_meta,
+                    )
+                )
+                await _finish_cdp_stream(request_id)
+                return
+
             message_text = f"Google AI Studio CDP stream failed: {error_text}"
             Logger.error(message_text)
             await response_queue.put({"error": message_text})
@@ -6182,10 +6483,16 @@ class AIStudioDriver(BaseDriver):
 
             try:
                 client = await self._get_http_client()
+                timeout = httpx.Timeout(
+                    connect=10.0,
+                    read=self.INTERCEPT_FIRST_CHUNK_TIMEOUT_S,
+                    write=60.0,
+                    pool=30.0,
+                )
                 request_kwargs: Dict[str, Any] = {
                     "headers": headers,
                     "cookies": cookie_dict,
-                    "timeout": 120.0,
+                    "timeout": timeout,
                 }
                 if request_body is not None:
                     request_kwargs["content"] = request_body
@@ -6212,11 +6519,45 @@ class AIStudioDriver(BaseDriver):
                             break
             except httpx.ReadError as e:
                 if not aborted and not self.abort_requested:
+                    if not full_response_body and not stream_state.get("emitted_text"):
+                        Logger.warning(
+                            f"Google AI Studio: intercepted network stream read error before data arrived ({e}); "
+                            "continuing browser route and falling back to DOM stream scraping..."
+                        )
+                        try:
+                            await route.continue_()
+                        except Exception as cont_exc:
+                            Logger.debug(f"Google AI Studio: route continue after failure: {cont_exc}")
+                        asyncio.create_task(
+                            self._stream_response_from_dom(
+                                response_queue,
+                                abort_event=abort_event,
+                                attempt_meta=current_attempt_meta,
+                            )
+                        )
+                        return
                     stream_state["encountered_error"] = True
                     Logger.error(f"Google AI Studio: read error during intercepted request: {e}")
                     await response_queue.put({"error": str(e)})
             except Exception as e:
                 if not aborted and not self.abort_requested:
+                    if not full_response_body and not stream_state.get("emitted_text"):
+                        Logger.warning(
+                            f"Google AI Studio: intercepted network stream failed before data arrived ({e}); "
+                            "continuing browser route and falling back to DOM stream scraping..."
+                        )
+                        try:
+                            await route.continue_()
+                        except Exception as cont_exc:
+                            Logger.debug(f"Google AI Studio: route continue after failure: {cont_exc}")
+                        asyncio.create_task(
+                            self._stream_response_from_dom(
+                                response_queue,
+                                abort_event=abort_event,
+                                attempt_meta=current_attempt_meta,
+                            )
+                        )
+                        return
                     stream_state["encountered_error"] = True
                     Logger.error(f"Google AI Studio: error during intercepted request: {e}")
                     await response_queue.put({"error": str(e)})

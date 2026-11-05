@@ -1,8 +1,8 @@
 {
-  "version": "2.9.3",
+  "version": "2.9.6",
   "aua": true,
   "severity": 3,
-  "pu": "discord",
+  "pu": "none",
   "pufref": "none",
-  "summary": "Kimi K2.8 as its own picker model, DeepSeek new radio picker, GLM modal-overlay fix"
+  "summary": "Xiaomi MiMo: Added MiMo-V2.6-Pro-Ultraspeed, updated endpoints, and fixed stream parsing"
 }

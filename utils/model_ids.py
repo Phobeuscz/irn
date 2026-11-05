@@ -148,6 +148,8 @@ def _with_real_model_api_prefix(provider: DriverProvider, base_id: str) -> str:
         return safe_base
     if safe_base == provider_prefix or safe_base.startswith(f"{provider_prefix}-"):
         return safe_base
+    if provider == DriverProvider.QWEN_LM and safe_base.startswith("qwen"):
+        return re.sub(r"^qwen(\d)", r"qwen-\1", safe_base)
     return f"{provider_prefix}-{safe_base}"
 
 
@@ -189,11 +191,29 @@ def _real_model_id_bases_for_label(
     if not base_id:
         return []
 
-    base_ids = [base_id] if include_base else []
+    raw_label = str(label or "").strip().lower()
+    raw_dot_id = re.sub(r"\s+", "-", raw_label)
+    raw_dot_id = re.sub(r"[^a-z0-9.-]+", "", raw_dot_id).strip("-")
+
+    base_ids = []
+    if include_base:
+        base_ids.append(base_id)
+        if raw_dot_id and raw_dot_id != base_id and raw_dot_id not in base_ids:
+            base_ids.append(raw_dot_id)
+        if re.match(r"^qwen\d", base_id):
+            hyphen_id = re.sub(r"^qwen(\d)", r"qwen-\1", base_id)
+            if hyphen_id not in base_ids:
+                base_ids.append(hyphen_id)
+        if raw_dot_id and re.match(r"^qwen\d", raw_dot_id):
+            hyphen_dot_id = re.sub(r"^qwen(\d)", r"qwen-\1", raw_dot_id)
+            if hyphen_dot_id not in base_ids:
+                base_ids.append(hyphen_dot_id)
+
     if include_provider_prefix and provider is not None:
-        prefixed_id = _with_real_model_api_prefix(provider, base_id)
-        if prefixed_id and prefixed_id not in base_ids:
-            base_ids.append(prefixed_id)
+        for bid in list(base_ids):
+            prefixed_id = _with_real_model_api_prefix(provider, bid)
+            if prefixed_id and prefixed_id not in base_ids:
+                base_ids.append(prefixed_id)
     return base_ids
 
 
@@ -216,6 +236,7 @@ def _real_model_label_map(
         if not label or not base_ids:
             continue
         for base_id in base_ids:
+            label_map.setdefault(base_id, label)
             for suffix, _mode in REAL_MODEL_SUFFIX_MODE_BY_SUFFIX:
                 label_map.setdefault(f"{base_id}{suffix}", label)
     return label_map
@@ -240,6 +261,7 @@ def _real_model_mode_map(
         if not label or not base_ids:
             continue
         for base_id in base_ids:
+            mode_map.setdefault(base_id, MODE_AUTO)
             for suffix, mode in REAL_MODEL_SUFFIX_MODE_BY_SUFFIX:
                 mode_map.setdefault(f"{base_id}{suffix}", mode)
     return mode_map
@@ -409,6 +431,136 @@ def resolve_parallel_provider_from_model_id(
     return None
 
 
+QWEN_DEPRECATED_MODEL_ALIASES: Dict[str, str] = {
+    # 3.7 previews
+    "3-7-max-preview": "Qwen3.7-Max",
+    "3.7-max-preview": "Qwen3.7-Max",
+    "3-7-plus-preview": "Qwen3.7-Plus",
+    "3.7-plus-preview": "Qwen3.7-Plus",
+    # 3.6 retired
+    "3-6-max": "Qwen3.7-Max",
+    "3.6-max": "Qwen3.7-Max",
+    "3-6-max-preview": "Qwen3.6-Plus",
+    "3.6-max-preview": "Qwen3.6-Plus",
+    "3-6-plus-preview": "Qwen3.6-Plus",
+    "3.6-plus-preview": "Qwen3.6-Plus",
+    "3-6-27b": "Qwen3.6-Plus",
+    "3.6-27b": "Qwen3.6-Plus",
+    "3-6-35b-a3b": "Qwen3.6-Plus",
+    "3.6-35b-a3b": "Qwen3.6-Plus",
+    # 3.5 retired / experimental checkpoints
+    "3-5-flash": "Qwen3.8-Omni-Flash",
+    "3.5-flash": "Qwen3.8-Omni-Flash",
+    "3-5-omni-flash": "Qwen3.8-Omni-Flash",
+    "3.5-omni-flash": "Qwen3.8-Omni-Flash",
+    "3-omni-flash": "Qwen3.8-Omni-Flash",
+    "3-5-omni-plus": "Qwen3.7-Plus",
+    "3.5-omni-plus": "Qwen3.7-Plus",
+    "3-5-max-preview": "Qwen3.7-Max",
+    "3.5-max-preview": "Qwen3.7-Max",
+    "3-5-397b-a17b": "Qwen3.6-Plus",
+    "3.5-397b-a17b": "Qwen3.6-Plus",
+    "3-5-122b-a10b": "Qwen3.6-Plus",
+    "3.5-122b-a10b": "Qwen3.6-Plus",
+    "3-5-27b": "Qwen3.5-Plus",
+    "3.5-27b": "Qwen3.5-Plus",
+    "3-5-35b-a3b": "Qwen3.5-Plus",
+    "3.5-35b-a3b": "Qwen3.5-Plus",
+    # 3.0 / 2.5 retired
+    "3-max": "Qwen3.7-Max",
+    "3-coder": "Qwen3.7-Plus",
+    "3-vl-235b-a22b": "Qwen3.7-Plus",
+    "3-235b-a22b-2507": "Qwen3.7-Plus",
+    "2-5-max": "Qwen3.5-Plus",
+    "2.5-max": "Qwen3.5-Plus",
+}
+
+
+def _resolve_qwen_deprecated_model_alias(normalized: str) -> str | None:
+    base = normalized
+    for suffix, _ in REAL_MODEL_SUFFIX_MODE_BY_SUFFIX:
+        if base.endswith(suffix) and len(base) > len(suffix):
+            base = base[:-len(suffix)]
+            break
+    if base.startswith("qwen-"):
+        base = base[len("qwen-"):]
+    elif base.startswith("qwen"):
+        base = base[len("qwen"):]
+
+    match = QWEN_DEPRECATED_MODEL_ALIASES.get(base)
+    if match is None and "." in base:
+        match = QWEN_DEPRECATED_MODEL_ALIASES.get(base.replace(".", "-"))
+    return match
+
+
+GLM_DEPRECATED_MODEL_ALIASES: Dict[str, str] = {
+    "5-1": "GLM-5.3",
+    "5.1": "GLM-5.3",
+    "5-turbo": "GLM-5.3-Flash",
+    "5v-turbo": "GLM-5.3",
+    "4-7": "GLM-5.3",
+    "4.7": "GLM-5.3",
+}
+
+
+def _resolve_glm_deprecated_model_alias(normalized: str) -> str | None:
+    base = normalized
+    for suffix, _ in REAL_MODEL_SUFFIX_MODE_BY_SUFFIX:
+        if base.endswith(suffix) and len(base) > len(suffix):
+            base = base[:-len(suffix)]
+            break
+    if base.startswith("glm-"):
+        base = base[len("glm-"):]
+    elif base.startswith("glm"):
+        base = base[len("glm"):]
+
+    match = GLM_DEPRECATED_MODEL_ALIASES.get(base)
+    if match is None and "." in base:
+        match = GLM_DEPRECATED_MODEL_ALIASES.get(base.replace(".", "-"))
+    return match
+
+
+MIMO_DEPRECATED_MODEL_ALIASES: Dict[str, str] = {
+    "v2-5-pro": "MiMo-V2.6-Pro",
+    "v2.5-pro": "MiMo-V2.6-Pro",
+    "v2-5": "MiMo-V2.6-Pro",
+    "v2.5": "MiMo-V2.6-Pro",
+    "2-5-pro": "MiMo-V2.6-Pro",
+    "2.5-pro": "MiMo-V2.6-Pro",
+    "2-5": "MiMo-V2.6-Pro",
+    "2.5": "MiMo-V2.6-Pro",
+    "ultraspeed": "MiMo-V2.6-Pro-Ultraspeed",
+    "ultra": "MiMo-V2.6-Pro-Ultraspeed",
+    "v2-6-pro-ultra": "MiMo-V2.6-Pro-Ultraspeed",
+    "v2.6-pro-ultra": "MiMo-V2.6-Pro-Ultraspeed",
+    "2-6-pro-ultra": "MiMo-V2.6-Pro-Ultraspeed",
+    "2.6-pro-ultra": "MiMo-V2.6-Pro-Ultraspeed",
+    "2-6-pro-ultraspeed": "MiMo-V2.6-Pro-Ultraspeed",
+    "2.6-pro-ultraspeed": "MiMo-V2.6-Pro-Ultraspeed",
+    "v2-6-ultraspeed": "MiMo-V2.6-Pro-Ultraspeed",
+    "v2.6-ultraspeed": "MiMo-V2.6-Pro-Ultraspeed",
+    "2-6-ultraspeed": "MiMo-V2.6-Pro-Ultraspeed",
+    "2.6-ultraspeed": "MiMo-V2.6-Pro-Ultraspeed",
+}
+
+
+def _resolve_mimo_deprecated_model_alias(normalized: str) -> str | None:
+    base = normalized
+    for suffix, _ in REAL_MODEL_SUFFIX_MODE_BY_SUFFIX:
+        if base.endswith(suffix) and len(base) > len(suffix):
+            base = base[:-len(suffix)]
+            break
+    if base.startswith("mimo-"):
+        base = base[len("mimo-"):]
+    elif base.startswith("mimo"):
+        base = base[len("mimo"):]
+
+    match = MIMO_DEPRECATED_MODEL_ALIASES.get(base)
+    if match is None and "." in base:
+        match = MIMO_DEPRECATED_MODEL_ALIASES.get(base.replace(".", "-"))
+    return match
+
+
 def resolve_real_model_label_from_model_id(
     provider: DriverProvider,
     model: Any,
@@ -423,12 +575,22 @@ def resolve_real_model_label_from_model_id(
     if provider == DriverProvider.AI_STUDIO:
         normalized = _strip_aistudio_override_suffix(normalized)
 
-    return _real_model_label_map(
+    label_map = _real_model_label_map(
         real_model_labels,
         provider=provider,
         include_base=not require_provider_prefix,
         include_provider_prefix=True,
-    ).get(normalized)
+    )
+    res = label_map.get(normalized)
+    if res is None and "." in normalized:
+        res = label_map.get(normalized.replace(".", "-"))
+    if res is None and provider == DriverProvider.QWEN_LM:
+        res = _resolve_qwen_deprecated_model_alias(normalized)
+    if res is None and provider == DriverProvider.GLM_CHAT:
+        res = _resolve_glm_deprecated_model_alias(normalized)
+    if res is None and provider == DriverProvider.MIMO:
+        res = _resolve_mimo_deprecated_model_alias(normalized)
+    return res
 
 
 def get_model_ids_for_provider(

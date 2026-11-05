@@ -63,23 +63,17 @@ Shows a scrollable list of contributors. Clicking a card opens their profile.
 
 :material-arrow-right: [Contributors](contributors.md)
 
-### :material-chat: Discord Server
-
-Opens the IntenseRP Next Discord server for quick questions, shared troubleshooting, and casual feedback.
-
-:material-arrow-right: [Join Discord](https://discord.gg/4Gvjk2RdsK)
-
 ### :material-source-repository: GitHub
 
 Opens the main IntenseRP Next GitHub repository.
 
-:material-arrow-right: [Open Repository](https://github.com/LyubomirT/intense-rp-next)
+:material-arrow-right: [Open Repository](https://github.com/Lemomation/irn)
 
 ### :material-book-open-page-variant: Docs
 
 Opens the main documentation page.
 
-:material-arrow-right: [Open Docs](https://intense-rp-next.readthedocs.io/en/latest/)
+:material-arrow-right: [Open Docs](https://lemomation.github.io/irn/)
 
 ## :material-arrow-left: Back
 

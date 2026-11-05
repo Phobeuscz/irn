@@ -107,6 +107,7 @@ class _MimoEventStreamParser:
         self.finish_emitted = False
         self.provider_final_seen = False
         self.sensitive_query_seen = False
+        self.thinking_active = False
 
         self._line_buffer = bytearray()
         self._event_name = ""
@@ -142,6 +143,11 @@ class _MimoEventStreamParser:
 
         if self.sensitive_query_seen:
             return out
+
+        if self.thinking_active:
+            self.thinking_active = False
+            if self.send_thinking:
+                out.append({"type": "delta", "content": "</think>"})
 
         if self._stripper is not None:
             tail = self._stripper.finish()
@@ -189,28 +195,6 @@ class _MimoEventStreamParser:
         payload = self._parse_json_data(data)
         out: list[dict[str, Any]] = []
 
-        if event_name == "message":
-            content = ""
-            if isinstance(payload, dict) and str(payload.get("type") or "") == "text":
-                content = str(payload.get("content") or "")
-            content = content.replace("\x00", "")
-            if not content:
-                return []
-
-            if self._stripper is not None:
-                content = self._stripper.feed(content)
-            if content:
-                self.emitted_text = True
-                out.append({"type": "delta", "content": content})
-            return out
-
-        if event_name == "usage":
-            usage = self._normalize_usage(payload)
-            if self.include_usage and usage and not self._usage_emitted:
-                self._usage_emitted = True
-                out.append({"type": "usage", "usage": usage})
-            return out
-
         if event_name == "sensitive_query":
             self.sensitive_query_seen = True
             out.append(
@@ -221,13 +205,79 @@ class _MimoEventStreamParser:
             )
             return out
 
-        if event_name == "finish":
+        if event_name == "error":
+            err = ""
+            if isinstance(payload, dict):
+                err = str(payload.get("message") or payload.get("error") or "")
+            if not err:
+                err = str(data or "MiMo returned an error event.")
+            out.append({"type": "error", "message": err})
+            return out
+
+        is_done = (
+            event_name == "finish"
+            or (isinstance(payload, dict) and str(payload.get("content") or "") == "[DONE]")
+            or str(data or "").strip() == "[DONE]"
+        )
+
+        if is_done:
             self.provider_final_seen = True
             if self.sensitive_query_seen:
                 return []
+            if self.thinking_active:
+                self.thinking_active = False
+                if self.send_thinking:
+                    out.append({"type": "delta", "content": "</think>"})
+            if self._stripper is not None:
+                tail = self._stripper.finish()
+                if tail:
+                    self.emitted_text = True
+                    out.append({"type": "delta", "content": tail})
             if self.emitted_text and not self.finish_emitted:
                 self.finish_emitted = True
                 out.append({"type": "delta", "content": "", "finish_reason": "stop"})
+            return out
+
+        if event_name == "usage":
+            usage = self._normalize_usage(payload)
+            if self.include_usage and usage and not self._usage_emitted:
+                self._usage_emitted = True
+                out.append({"type": "usage", "usage": usage})
+            return out
+
+        if event_name in ("message", ""):
+            if not isinstance(payload, dict):
+                return []
+
+            # 1. Reasoning content (thinking chunks)
+            reasoning_chunk = payload.get("reasoningContent")
+            if reasoning_chunk is not None:
+                reasoning = str(reasoning_chunk).replace("\x00", "")
+                if reasoning and self.send_thinking:
+                    if not self.thinking_active:
+                        self.thinking_active = True
+                        self.emitted_text = True
+                        out.append({"type": "delta", "content": "<think>"})
+                    self.emitted_text = True
+                    out.append({"type": "delta", "content": reasoning})
+
+            # 2. Assistant answer content
+            # Supports new schema ({"messageType": "assistant", "content": "..."})
+            # and legacy schema ({"type": "text", "content": "..."})
+            content_chunk = payload.get("content")
+            if content_chunk is not None and str(content_chunk) != "[DONE]":
+                content = str(content_chunk).replace("\x00", "")
+                if content:
+                    if self.thinking_active:
+                        self.thinking_active = False
+                        if self.send_thinking:
+                            out.append({"type": "delta", "content": "</think>"})
+                    if self._stripper is not None:
+                        content = self._stripper.feed(content)
+                    if content:
+                        self.emitted_text = True
+                        out.append({"type": "delta", "content": content})
+
             return out
 
         return []
@@ -298,13 +348,36 @@ class _MimoEventStreamParser:
 
 class MimoDriver(BaseDriver):
     BASE_URL = "https://aistudio.xiaomimimo.com/#/c"
+    ULTRA_URL = "https://aistudio.xiaomimimo.com/#/ultra"
     AUTH_COOKIE_URL = "https://aistudio.xiaomimimo.com"
     AUTH_COOKIE_NAMES = ("usedId", "userId", "userid")
-    CHAT_REQUEST_URL_PREFIX = "https://aistudio.xiaomimimo.com/open-apis/bot/chat?"
     CHAT_URL_RE = re.compile(
-        r"^https://aistudio\.xiaomimimo\.com/#/chat/([^/?#]+)",
+        r"^https://aistudio\.xiaomimimo\.com/#/(chat|ultra)/([^/?#]+)",
         re.IGNORECASE,
     )
+
+    @classmethod
+    def _is_chat_request_url(cls, url: str) -> bool:
+        u = str(url or "").lower()
+        if "aistudio.xiaomimimo.com" not in u:
+            return False
+        if "/gentitle" in u or "/save" in u or "/list" in u:
+            return False
+        return "/chat?" in u or "/chat/" in u or u.endswith("/chat")
+
+    async def _get_document_lang(self) -> str:
+        raw = await super()._get_document_lang()
+        raw = str(raw or "").strip()
+        if raw.startswith("{") and "value" in raw:
+            try:
+                data = json.loads(raw)
+                val = str(data.get("value") or "").strip().lower()
+                if val in ("system", "en", "en-us") or val.startswith("en-"):
+                    return "en-US"
+                return val or raw
+            except Exception:
+                pass
+        return raw
     LOGIN_URL_PREFIX = "https://account.xiaomi.com/fe/service/login/password"
 
     ANNOUNCEMENT_CLOSE_SELECTOR = "[data-track-id='claw_announcement_close_btn']"
@@ -338,9 +411,20 @@ class MimoDriver(BaseDriver):
         "p-3px",
     )
     MODEL_LABELS: List[str] = [
+        "MiMo-V2.6-Pro",
+        "MiMo-V2.6-Flash",
+        "MiMo-V2.6-Pro-Ultraspeed",
         "MiMo-V2.5-Pro",
         "MiMo-V2.5",
     ]
+    RETIRED_MODEL_LABELS: set[str] = {
+        "MiMo-V2.5-Pro",
+        "MiMo-V2.5",
+    }
+    MIMO_RETIRED_MODEL_FALLBACKS: Dict[str, str] = {
+        "MiMo-V2.5-Pro": "MiMo-V2.6-Pro",
+        "MiMo-V2.5": "MiMo-V2.6-Pro",
+    }
 
     AUTH_TEXTAREA_SETTLE_S = 6.0
     INTERCEPT_IDLE_TIMEOUT_S = 75.0
@@ -357,8 +441,18 @@ class MimoDriver(BaseDriver):
         self._abort_ui_task: asyncio.Task | None = None
         self._refresh_quirks()
 
-    def get_start_url(self) -> str:
+    @classmethod
+    def _is_ultraspeed_model(cls, model_label: Any) -> bool:
+        canon = cls._canonicalize_model_label(model_label)
+        return "ultra" in canon
+
+    def _get_target_url_for_model(self, model_label: Any) -> str:
+        if self._is_ultraspeed_model(model_label):
+            return self.ULTRA_URL
         return self.BASE_URL
+
+    def get_start_url(self) -> str:
+        return self._get_target_url_for_model(self._get_configured_model_label())
 
     def should_apply_configured_model_before_request(self) -> bool:
         return False
@@ -733,7 +827,7 @@ class MimoDriver(BaseDriver):
                 level="info",
             )
             await self._wait_until_logged_in()
-            await self.page.goto(self.BASE_URL, wait_until="domcontentloaded", timeout=45000)
+            await self.page.goto(self.get_start_url(), wait_until="domcontentloaded", timeout=45000)
             await self._wait_for_chat_ready(timeout_ms=60000)
             self._mark_active_ece_pair_used()
             return
@@ -749,7 +843,7 @@ class MimoDriver(BaseDriver):
                 level="warning",
             )
             await self._wait_until_logged_in()
-            await self.page.goto(self.BASE_URL, wait_until="domcontentloaded", timeout=45000)
+            await self.page.goto(self.get_start_url(), wait_until="domcontentloaded", timeout=45000)
             await self._wait_for_chat_ready(timeout_ms=60000)
             self._mark_active_ece_pair_used()
             return
@@ -830,7 +924,7 @@ class MimoDriver(BaseDriver):
             await self._wait_until_logged_in()
 
         try:
-            await self.page.goto(self.BASE_URL, wait_until="domcontentloaded", timeout=45000)
+            await self.page.goto(self.get_start_url(), wait_until="domcontentloaded", timeout=45000)
         except Exception:
             pass
         await self._wait_for_chat_ready(timeout_ms=60000)
@@ -847,11 +941,15 @@ class MimoDriver(BaseDriver):
         return re.sub(r"[^a-z0-9]+", "", normalized)
 
     def api_real_model_labels(self) -> list[str]:
-        return list(self.MODEL_LABELS)
+        return [
+            label for label in self.MODEL_LABELS
+            if label not in self.RETIRED_MODEL_LABELS
+        ]
 
     def _get_configured_model_label(self) -> str:
-        value = self._get_str_setting("model", "MiMo-V2.5-Pro").strip()
-        return value or "MiMo-V2.5-Pro"
+        value = self._get_str_setting("model", "MiMo-V2.6-Pro").strip()
+        chosen = value or "MiMo-V2.6-Pro"
+        return self.MIMO_RETIRED_MODEL_FALLBACKS.get(chosen, chosen)
 
     def _get_model_label_for_request(self, model: Any = None) -> str:
         override = resolve_real_model_label_from_model_id(
@@ -859,7 +957,8 @@ class MimoDriver(BaseDriver):
             model,
             self.api_real_model_labels(),
         )
-        return override or self._get_configured_model_label()
+        target = override or self._get_configured_model_label()
+        return self.MIMO_RETIRED_MODEL_FALLBACKS.get(target, target)
 
     async def apply_configured_model(self, model: Any = None) -> None:
         desired = self._get_model_label_for_request(model)
@@ -870,6 +969,10 @@ class MimoDriver(BaseDriver):
     async def _read_current_mimo_model_label(self) -> str:
         if not self.page:
             return ""
+
+        current_url = str(getattr(self.page, "url", "") or "").strip().lower()
+        if "#/ultra" in current_url:
+            return "MiMo-V2.6-Pro-Ultraspeed"
 
         try:
             text = await self.page.evaluate(
@@ -1514,8 +1617,26 @@ class MimoDriver(BaseDriver):
     async def _ensure_mimo_model_selected(self, desired_label: str) -> None:
         await self._dismiss_blocking_popups()
         desired = str(desired_label or "").strip()
+        desired = self.MIMO_RETIRED_MODEL_FALLBACKS.get(desired, desired)
         if not desired:
             return
+
+        current_url = str(getattr(self.page, "url", "") or "").strip().lower()
+        is_desired_ultra = self._is_ultraspeed_model(desired)
+
+        if is_desired_ultra:
+            if "#/ultra" in current_url:
+                return
+            if self.page:
+                Logger.debug("MiMo: navigating to UltraSpeed interface (#/ultra)...")
+                await self.page.goto(self.ULTRA_URL, wait_until="domcontentloaded", timeout=45000)
+                await self._wait_for_chat_ready(timeout_ms=60000)
+            return
+
+        if "#/ultra" in current_url and self.page:
+            Logger.debug("MiMo: navigating from UltraSpeed back to standard chat interface (#/c)...")
+            await self.page.goto(self.BASE_URL, wait_until="domcontentloaded", timeout=45000)
+            await self._wait_for_chat_ready(timeout_ms=60000)
 
         current = await self._read_current_mimo_model_label()
         Logger.debug(f"MiMo: model switch check current='{current or 'unknown'}' desired='{desired}'.")
@@ -1621,12 +1742,13 @@ class MimoDriver(BaseDriver):
         match = self.CHAT_URL_RE.match(str(url or "").strip())
         if not match:
             return None
-        conversation_id = str(match.group(1) or "").strip()
+        section = str(match.group(1) or "chat").strip().lower()
+        conversation_id = str(match.group(2) or "").strip()
         if not conversation_id:
             return None
         return {
             "conversation_id": conversation_id,
-            "conversation_url": f"https://aistudio.xiaomimimo.com/#/chat/{conversation_id}",
+            "conversation_url": f"https://aistudio.xiaomimimo.com/#/{section}/{conversation_id}",
         }
 
     async def _get_current_conversation_info(self) -> Optional[Dict[str, str]]:
@@ -1723,7 +1845,9 @@ class MimoDriver(BaseDriver):
         _ = source
         if not self.page:
             return
-        await self.page.goto(self.BASE_URL, wait_until="domcontentloaded", timeout=45000)
+        target_label = self._get_model_label_for_request(self.current_model)
+        target_url = self._get_target_url_for_model(target_label)
+        await self.page.goto(target_url, wait_until="domcontentloaded", timeout=45000)
         await self._wait_for_chat_ready(timeout_ms=60000)
 
     async def set_deepthink_state(self, state: bool) -> None:
@@ -2042,7 +2166,7 @@ class MimoDriver(BaseDriver):
             resolved_model,
             overrides=macros_overrides,
         )
-        ui_model_label = str(effective_settings.get("model_label") or "MiMo-V2.5-Pro")
+        ui_model_label = str(effective_settings.get("model_label") or "MiMo-V2.6-Pro")
         send_thinking = bool(effective_settings.get("send_deepthink"))
         send_as_text_file = bool(effective_settings.get("send_as_text_file"))
         include_usage = bool(effective_settings.get("count_tokens"))
@@ -2199,7 +2323,7 @@ class MimoDriver(BaseDriver):
             if not request_id or not isinstance(response, dict):
                 return
             url = str(response.get("url") or "")
-            if not url.startswith(self.CHAT_REQUEST_URL_PREFIX):
+            if not self._is_chat_request_url(url):
                 return
             method = request_methods.get(request_id, "").upper()
             if method and method != "POST":

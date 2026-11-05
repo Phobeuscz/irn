@@ -395,8 +395,8 @@ def _release_notes_url_for_version(version: str) -> str:
     if value.lower().startswith("v"):
         value = value[1:].strip()
     if not value or value.lower() == "unknown":
-        return "https://github.com/Phobeuscz/irn/releases"
-    return f"https://github.com/Phobeuscz/irn/releases/tag/v{value}"
+        return "https://github.com/Lemomation/irn/releases"
+    return f"https://github.com/Lemomation/irn/releases/tag/v{value}"
 
 
 def _read_postupdate_cleanup_backup_dir(app_root: Path) -> tuple[Path, Path] | None:
@@ -513,7 +513,7 @@ def _consume_postupdate_installed_info() -> UpdateInstalledInfo | None:
     try:
         release_notes_url = _release_notes_url_for_version(version)
     except Exception:
-        release_notes_url = "https://github.com/Phobeuscz/irn/releases"
+        release_notes_url = "https://github.com/Lemomation/irn/releases"
 
     try:
         flag_path.unlink()
@@ -803,7 +803,7 @@ class MainWindow(QMainWindow):
             try:
                 release_notes_url = _release_notes_url_for_version(version)
             except Exception:
-                release_notes_url = "https://github.com/Phobeuscz/irn/releases"
+                release_notes_url = "https://github.com/Lemomation/irn/releases"
 
             self._post_update_info = UpdateInstalledInfo(
                 version=str(version or "unknown"),
@@ -2194,11 +2194,11 @@ class MainWindow(QMainWindow):
 
             version_label = QLabel(f"v{version}")
             version_label.setStyleSheet(f"""
-                font-size: {BrandColors.FONT_SIZE_SMALL};
+                font-size: 15px;
                 font-weight: bold;
-                color: {BrandColors.TEXT_SECONDARY};
+                color: {BrandColors.TEXT_PRIMARY};
                 background: transparent;
-                padding-top: 4px;
+                padding-top: 2px;
             """)
             layout.addWidget(version_label, alignment=Qt.AlignVCenter)
 
@@ -3372,7 +3372,9 @@ class MainWindow(QMainWindow):
             canonicalize_label = getattr(runtime_driver, "_canonicalize_model_label", None)
             if callable(read_label) and callable(canonicalize_label):
                 current_label = str(await read_label() or "").strip()
-                if canonicalize_label(current_label) != canonicalize_label(desired):
+                fallback_map = getattr(runtime_driver, "MIMO_RETIRED_MODEL_FALLBACKS", {})
+                expected_target = fallback_map.get(desired, desired) if isinstance(fallback_map, dict) else desired
+                if canonicalize_label(current_label) != canonicalize_label(expected_target):
                     shown = current_label or "Unknown"
                     raise RuntimeError(
                         f"Xiaomi MiMo did not confirm the requested model switch (still showing '{shown}')."
